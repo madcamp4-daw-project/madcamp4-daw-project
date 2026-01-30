@@ -2,7 +2,8 @@
 
 > **프로젝트**: AI Audio Mixing & Conversion System  
 > **작성일**: 2026-01-29  
-> **버전**: 1.1
+> **버전**: 1.2  
+> **기준 문서**: [PROJECT_PLAN.md](./PROJECT_PLAN.md) (v1.3) — 파일 구조·담당은 계획서와 동일하게 유지합니다.
 
 ---
 
@@ -10,20 +11,34 @@
 
 ```
 madcamp04/
-├── client/                          # 프론트엔드 (React)
+├── client/                          # 프론트엔드 (React) — 개발자 B 담당
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── CompositionKeyboard/    # 신스 피아노 컴포넌트
 │   │   │   │   ├── CompositionKeyboard.jsx  # SynthPiano 컴포넌트
 │   │   │   │   └── CompositionKeyboard.module.css  # SynthPiano 스타일
-│   │   │   └── DJMachine/              # 믹스 컨트롤러 컴포넌트
-│   │   │       ├── DJMachine.jsx       # MixController 컴포넌트
-│   │   │       ├── DJMachine.module.css
-│   │   │       ├── DeckPanel.jsx       # TrackDeck 컴포넌트
-│   │   │       ├── Turntable.jsx       # VinylPlayer 컴포넌트
-│   │   │       ├── WaveformBar.jsx     # AudioVisualizer 컴포넌트
-│   │   │       ├── EffectPad.jsx       # FxButton 컴포넌트
-│   │   │       └── EQKnob.jsx          # SoundDial 컴포넌트
+│   │   │   ├── DJMachine/              # 믹스 컨트롤러 컴포넌트
+│   │   │   │   ├── DJMachine.jsx       # MixController 컴포넌트
+│   │   │   │   ├── DJMachine.module.css
+│   │   │   │   ├── DeckPanel.jsx       # TrackDeck 컴포넌트
+│   │   │   │   ├── Turntable.jsx       # VinylPlayer 컴포넌트
+│   │   │   │   ├── WaveformBar.jsx     # AudioVisualizer 컴포넌트
+│   │   │   │   ├── EffectPad.jsx       # FxButton 컴포넌트
+│   │   │   │   └── EQKnob.jsx          # SoundDial 컴포넌트
+│   │   │   ├── Layout/                 # 앱 레이아웃·네비게이션 (개발자 B)
+│   │   │   │   ├── AppLayout.jsx
+│   │   │   │   └── AppLayout.module.css
+│   │   │   └── common/                 # 에러·로딩 UI (개발자 B)
+│   │   │       ├── ErrorBoundary.jsx
+│   │   │       ├── LoadingSpinner.jsx
+│   │   │       └── common.module.css
+│   │   ├── pages/                     # 라우팅 페이지 (개발자 B)
+│   │   │   ├── SynthPage.jsx           # 신스 피아노 페이지
+│   │   │   ├── MixPage.jsx             # 믹스 컨트롤러 페이지
+│   │   │   └── pages.module.css
+│   │   ├── hooks/                     # 커스텀 훅 (개발자 B)
+│   │   │   ├── useAudioPlayer.js       # 재생 제어
+│   │   │   └── useUploadProgress.js    # 업로드 진행률
 │   │   ├── store/
 │   │   │   └── useDJStore.js           # DJ 상태 관리 (Zustand)
 │   │   └── api/
@@ -31,7 +46,7 @@ madcamp04/
 │   ├── package.json
 │   └── vite.config.js
 │
-├── server/                          # 백엔드 (Express.js + Python)
+├── server/                          # 백엔드 (Express.js + Python) — 개발자 A 담당
 │   ├── routes/
 │   │   └── audio.js                 # 사운드 처리 API 라우트 (/api/sound/*)
 │   ├── services/                    # Python 오디오 처리 서비스
@@ -158,10 +173,31 @@ madcamp04/
   - 믹서 상태
   - 이펙트 상태
 
+#### `client/src/components/Layout/AppLayout.jsx`
+
+- **담당자**: 개발자 B
+- **설명**: 앱 레이아웃·네비게이션 (React Router와 연동)
+- **주요 기능**: Synth / Mix 페이지 링크, 공통 헤더·푸터
+
+#### `client/src/components/common/ErrorBoundary.jsx`, `LoadingSpinner.jsx`
+
+- **담당자**: 개발자 B
+- **설명**: 에러 바운더리, 로딩/스켈레톤 UI (API 대기·업로드·분석·블렌드 화면 등)
+
+#### `client/src/pages/SynthPage.jsx`, `MixPage.jsx`
+
+- **담당자**: 개발자 B
+- **설명**: 신스 피아노 페이지, 믹스 컨트롤러 페이지 (라우팅 단위)
+
+#### `client/src/hooks/useAudioPlayer.js`, `useUploadProgress.js`
+
+- **담당자**: 개발자 B
+- **설명**: 재생 제어 훅, 업로드 진행률 훅 (API·로딩 UI 연동)
+
 #### `client/src/api/audioApi.js`
 
 - **담당자**: 개발자 B
-- **설명**: 오디오 API 클라이언트
+- **설명**: 오디오 API 클라이언트 (에러 핸들링·재시도 포함)
 - **주요 함수**:
   - `uploadSound()`: 오디오 파일 업로드
   - `splitLayers()`: 레이어 분리 요청
@@ -271,12 +307,10 @@ madcamp04/
 
 #### `.env.example`
 
-- **담당자**: 개발자 A
-- **설명**: 환경 변수 예제 파일
-- **주요 변수**:
-  - DB_USERNAME, DB_PASSWORD, DB_NAME
-  - GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
-  - SESSION_SECRET, PORT
+- **담당자**: 개발자 A (서버용), 개발자 B (클라이언트용 항목 추가)
+- **설명**: 환경 변수 예제 파일 (PROJECT_PLAN 기준)
+- **서버 변수 (A)**: DB_USERNAME, DB_PASSWORD, DB_NAME, SESSION_SECRET, PORT 등
+- **클라이언트 변수 (B)**: VITE_API_BASE_URL 등 Vite/React용 예시
 
 ---
 
@@ -297,17 +331,9 @@ madcamp04/
 
 #### `docs/API_SPEC.md`
 
-- **담당자**: 공동 작업
-- **설명**: API 명세서
-- **주요 내용**:
-  - 기본 정보
-  - 인증
-  - 사운드 업로드 및 분석 API
-  - 레이어 분리 API
-  - 블렌드 API
-  - 신스 피아노 API
-  - 믹스 컨트롤러 API
-  - 에러 처리
+- **담당자**: 개발자 A (서버 스펙·초안), 개발자 B (클라이언트 연동 가이드·에러 코드 섹션 보완)
+- **설명**: API 명세서 (PROJECT_PLAN 기준)
+- **주요 내용**: 기본 정보, 인증, 사운드/레이어/블렌드/신스/믹스 API, 에러 처리, **클라이언트 연동 가이드(§9)**
 
 #### `FILE_STRUCTURE.md`
 
@@ -321,10 +347,15 @@ madcamp04/
 ### 프론트엔드 의존성
 
 ```
+AppLayout.jsx (라우팅: SynthPage, MixPage)
+  └── SynthPage.jsx → CompositionKeyboard (SynthPiano)
+  └── MixPage.jsx   → DJMachine (MixController)
+  └── ErrorBoundary, LoadingSpinner (common)
+
 CompositionKeyboard.jsx (SynthPiano)
-  └── useStore (Zustand)
-  └── audioEngine (Tone.js)
-  └── audioApi.js
+  └── useDJStore (Zustand)
+  └── Tone.js, audioApi.js
+  └── useUploadProgress (녹음 업로드)
 
 DJMachine.jsx (MixController)
   └── DeckPanel.jsx (TrackDeck)
@@ -332,7 +363,7 @@ DJMachine.jsx (MixController)
       └── WaveformBar.jsx (AudioVisualizer)
       └── EffectPad.jsx (FxButton)
       └── EQKnob.jsx (SoundDial)
-  └── useDJStore.js
+  └── useDJStore.js, useAudioPlayer.js
   └── audioApi.js
 ```
 
@@ -361,19 +392,19 @@ audio.js (Express Router - /api/sound/*)
 6. `server/middleware/audioUpload.js` 생성
 7. `server/services/transition.py` - create_blend_sequence 구현
 
-### 개발자 B (프론트엔드)
+### 개발자 B (프론트엔드) — PROJECT_PLAN Day 순서 반영
 
-1. `client/src/components/CompositionKeyboard/CompositionKeyboard.jsx` - SynthPiano 구현
-2. `client/src/components/DJMachine/DJMachine.jsx` - MixController 구현
-3. `client/src/components/DJMachine/DeckPanel.jsx` - TrackDeck 구현
-4. `client/src/components/DJMachine/Turntable.jsx` - VinylPlayer 구현
-5. `client/src/components/DJMachine/WaveformBar.jsx` - AudioVisualizer 구현
-6. `client/src/components/DJMachine/EffectPad.jsx` - FxButton 구현
-7. `client/src/components/DJMachine/EQKnob.jsx` - SoundDial 구현
-8. `client/src/store/useDJStore.js` 생성
-9. `client/src/api/audioApi.js` 생성
+1. `client/src/components/Layout/AppLayout.jsx` - 레이아웃·네비게이션
+2. `client/src/pages/SynthPage.jsx`, `MixPage.jsx` - 페이지·라우팅
+3. `client/src/components/common/ErrorBoundary.jsx`, `LoadingSpinner.jsx` - 공통 UI
+4. `client/src/components/CompositionKeyboard/` - SynthPiano 구현
+5. `client/src/components/DJMachine/` - MixController, DeckPanel, Turntable, WaveformBar, EffectPad, EQKnob
+6. `client/src/hooks/useAudioPlayer.js`, `useUploadProgress.js` - 재생·업로드 훅
+7. `client/src/store/useDJStore.js` 생성
+8. `client/src/api/audioApi.js` - API 클라이언트·에러 핸들링·재시도
 
 ---
 
-**문서 버전**: 1.1  
-**최종 수정일**: 2026-01-29
+**문서 버전**: 1.2  
+**최종 수정일**: 2026-01-30  
+**변경 이력**: v1.2 — PROJECT_PLAN.md v1.3 기준 반영, Layout/common/pages/hooks 추가, 담당·의존성·생성 순서 정리
