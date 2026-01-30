@@ -3,12 +3,42 @@ import { Outlet, NavLink } from 'react-router-dom';
 
 function AppLayout() {
   return (
-    <div>
-      <nav>
-        <NavLink to="/synth">신스</NavLink>
-        <NavLink to="/mix">믹스</NavLink>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <nav style={{
+        display: 'flex',
+        gap: '20px',
+        padding: '15px 30px',
+        background: 'rgba(10, 10, 15, 0.95)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+        backdropFilter: 'blur(10px)',
+        zIndex: 100
+      }}>
+        <NavLink 
+          to="/synth" 
+          style={({ isActive }) => ({
+            color: isActive ? '#fff' : 'rgba(255, 255, 255, 0.5)',
+            textDecoration: 'none',
+            fontSize: '1.1rem',
+            fontWeight: 'bold',
+            transition: 'color 0.2s'
+          })}
+        >
+          🎹 Synth
+        </NavLink>
+        <NavLink 
+          to="/mix" 
+          style={({ isActive }) => ({
+            color: isActive ? '#fff' : 'rgba(255, 255, 255, 0.5)',
+            textDecoration: 'none',
+            fontSize: '1.1rem',
+            fontWeight: 'bold',
+            transition: 'color 0.2s'
+          })}
+        >
+          🎧 Mix
+        </NavLink>
       </nav>
-      <main>
+      <main style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <Outlet />
       </main>
     </div>

@@ -1,6 +1,13 @@
-// MixPage.jsx
 import React from 'react';
+import DJMachine from '../components/DJMachine/DJMachine';
+import styles from './pages.module.css';
+
 function MixPage() {
-  return <div><h1>믹스 컨트롤러</h1></div>;
+  return (
+    <div className={styles.mixPage}>
+      <DJMachine />
+    </div>
+  );
 }
+
 export default MixPage;

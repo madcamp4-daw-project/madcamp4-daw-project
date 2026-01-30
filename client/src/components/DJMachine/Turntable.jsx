@@ -1,20 +1,10 @@
 import React from 'react';
 
 /**
- * VinylPlayer 컴포넌트 속성
- */
-interface VinylPlayerProps {
-  spinning: boolean;
-  scratchShortcut: string;
-  playShortcut?: string;
-  unitIdx?: 1 | 2;
-}
-
-/**
  * VinylPlayer 컴포넌트
  * 턴테이블/바이닐 플레이어 UI
  */
-const VinylPlayer: React.FC<VinylPlayerProps> = ({ spinning, scratchShortcut, playShortcut, unitIdx }) => {
+const VinylPlayer = ({ spinning, scratchShortcut, playShortcut, unitIdx }) => {
   return (
     <div
       className={`vinyl-player ${unitIdx === 1 ? 'vinyl-player--unit1' : ''} ${spinning ? 'vinyl-player--spinning' : ''}`}

@@ -2,14 +2,6 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { useDJStore } from '../../store/useDJStore';
 
 /**
- * AudioVisualizer 컴포넌트 속성
- */
-interface AudioVisualizerProps {
-  unitIdx: 1 | 2;
-  variant?: 'top' | 'deck';
-}
-
-/**
  * 디바이스 픽셀 비율 반환
  */
 const getPixelRatio = () => Math.max(1, Math.floor(window.devicePixelRatio || 1));
@@ -17,37 +9,23 @@ const getPixelRatio = () => Math.max(1, Math.floor(window.devicePixelRatio || 1)
 /**
  * 값을 0~1 범위로 제한
  */
-function constrainValue(v: number) {
+function constrainValue(v) {
   return Math.max(0, Math.min(1, v));
 }
 
 /**
- * CUE 마커 라벨 타입
- */
-type MarkerLabel = { ratio: number; name: string };
-
-/**
  * 오디오 웨이브 렌더링 함수
- * @param context 캔버스 2D 컨텍스트
- * @param amplitudes 피크 데이터 배열
- * @param width 캔버스 너비
- * @param height 캔버스 높이
- * @param progressRatio 현재 재생 위치 (0~1)
- * @param variant 표시 모드
- * @param unitIdx 트랙 유닛 인덱스
- * @param markerPositions CUE 마커 위치 배열
- * @param markerLabels CUE 마커 라벨 배열
  */
 function renderAudioWave(
-  context: CanvasRenderingContext2D,
-  amplitudes: Float32Array,
-  width: number,
-  height: number,
-  progressRatio: number,
-  variant: 'top' | 'deck',
-  unitIdx?: 1 | 2,
-  markerPositions?: number[],
-  markerLabels?: MarkerLabel[]
+  context,
+  amplitudes,
+  width,
+  height,
+  progressRatio,
+  variant,
+  unitIdx,
+  markerPositions,
+  markerLabels
 ) {
   // 중앙선 기준 상/하 대칭 웨이브
   const centerY = Math.floor(height / 2);
@@ -67,7 +45,7 @@ function renderAudioWave(
   if (!sampleCount) return;
 
   // 샘플 위치 계산
-  const getAmplitudeAt = (x: number) => {
+  const getAmplitudeAt = (x) => {
     const t = x / Math.max(1, width - 1);
     const idx = Math.floor(t * (sampleCount - 1));
     return amplitudes[idx] ?? 0;
@@ -82,7 +60,7 @@ function renderAudioWave(
     if (barHeight === 0) continue;
 
     // 색상 설정: unit1은 보라색, unit2는 오렌지색
-    let primaryColor: [number, number, number] = [176, 102, 255]; // 기본 보라색
+    let primaryColor = [176, 102, 255]; // 기본 보라색
     if (unitIdx === 1) {
       primaryColor = [176, 102, 255]; // 보라색
     } else if (unitIdx === 2) {
@@ -166,8 +144,8 @@ function renderAudioWave(
  * AudioVisualizer 컴포넌트
  * 오디오 웨이브폼 시각화
  */
-const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ variant = 'top', unitIdx }) => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+const AudioVisualizer = ({ variant = 'top', unitIdx }) => {
+  const canvasRef = useRef(null);
 
   // 피크 데이터 구독
   const topPeaks = useDJStore((s) => s.deck1.waveformPeaks ?? null);
@@ -212,14 +190,14 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ variant = 'top', unit
     if (!unit1Dur || unit1Dur <= 0) return [];
     const c1 = unit1Cues?.[1];
     const c2 = unit1Cues?.[2];
-    return [c1, c2].filter((v): v is number => typeof v === 'number' && isFinite(v)).map((sec) => constrainValue(sec / unit1Dur));
+    return [c1, c2].filter((v) => typeof v === 'number' && isFinite(v)).map((sec) => constrainValue(sec / unit1Dur));
   }, [unit1Cues, unit1Dur]);
 
   const bottomMarkerPositions = useMemo(() => {
     if (!unit2Dur || unit2Dur <= 0) return [];
     const c1 = unit2Cues?.[1];
     const c2 = unit2Cues?.[2];
-    return [c1, c2].filter((v): v is number => typeof v === 'number' && isFinite(v)).map((sec) => constrainValue(sec / unit2Dur));
+    return [c1, c2].filter((v) => typeof v === 'number' && isFinite(v)).map((sec) => constrainValue(sec / unit2Dur));
   }, [unit2Cues, unit2Dur]);
 
   const unitMarkerPositions = useMemo(() => {
@@ -228,36 +206,36 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ variant = 'top', unit
     const cues = unitState?.cues ?? {};
     const c1 = cues?.[1];
     const c2 = cues?.[2];
-    return [c1, c2].filter((v): v is number => typeof v === 'number' && isFinite(v)).map((sec) => constrainValue(sec / dur));
+    return [c1, c2].filter((v) => typeof v === 'number' && isFinite(v)).map((sec) => constrainValue(sec / dur));
   }, [unitState?.cues, unitState?.durationSec]);
 
-  const topMarkerLabels = useMemo<MarkerLabel[]>(() => {
+  const topMarkerLabels = useMemo(() => {
     if (!unit1Dur || unit1Dur <= 0) return [];
     const c1 = unit1Cues?.[1];
     const c2 = unit1Cues?.[2];
-    const labels: MarkerLabel[] = [];
+    const labels = [];
     if (typeof c1 === 'number' && isFinite(c1)) labels.push({ ratio: constrainValue(c1 / unit1Dur), name: '1' });
     if (typeof c2 === 'number' && isFinite(c2)) labels.push({ ratio: constrainValue(c2 / unit1Dur), name: '2' });
     return labels;
   }, [unit1Cues, unit1Dur]);
 
-  const bottomMarkerLabels = useMemo<MarkerLabel[]>(() => {
+  const bottomMarkerLabels = useMemo(() => {
     if (!unit2Dur || unit2Dur <= 0) return [];
     const c1 = unit2Cues?.[1];
     const c2 = unit2Cues?.[2];
-    const labels: MarkerLabel[] = [];
+    const labels = [];
     if (typeof c1 === 'number' && isFinite(c1)) labels.push({ ratio: constrainValue(c1 / unit2Dur), name: '1' });
     if (typeof c2 === 'number' && isFinite(c2)) labels.push({ ratio: constrainValue(c2 / unit2Dur), name: '2' });
     return labels;
   }, [unit2Cues, unit2Dur]);
 
-  const unitMarkerLabels = useMemo<MarkerLabel[]>(() => {
+  const unitMarkerLabels = useMemo(() => {
     const dur = unitState?.durationSec ?? 0;
     if (!dur || dur <= 0) return [];
     const cues = unitState?.cues ?? {};
     const c1 = cues?.[1];
     const c2 = cues?.[2];
-    const labels: MarkerLabel[] = [];
+    const labels = [];
     if (typeof c1 === 'number' && isFinite(c1)) labels.push({ ratio: constrainValue(c1 / dur), name: '1' });
     if (typeof c2 === 'number' && isFinite(c2)) labels.push({ ratio: constrainValue(c2 / dur), name: '2' });
     return labels;

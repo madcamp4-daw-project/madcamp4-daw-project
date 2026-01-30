@@ -31,6 +31,53 @@ const getBaseUrl = () =>
   }
   
   /**
+   * Blob을 base64 문자열로 변환
+   * @param {Blob} blob - 변환할 Blob 객체
+   * @returns {Promise<string>} base64 인코딩된 문자열
+   */
+  async function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        // data:audio/webm;base64, 부분 제거
+        const base64String = reader.result.split(',')[1];
+        resolve(base64String);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /**
+   * 피아노 연주 녹음 저장 (POST /api/piano/record)
+   * @param {{ title: string, notes: Array<{time: number, note: string, duration: number}>, audioBlob: Blob }} params
+   * @returns {Promise<{ success: boolean, presetId?: number, audioPath?: string, message?: string, error?: string, code?: string }>}
+   */
+  export async function uploadPianoRecord({ title, notes = [], audioBlob }) {
+    if (!title || !audioBlob) {
+      throw new Error('title과 audioBlob은 필수입니다.');
+    }
+
+    // Blob을 base64로 변환
+    const base64Audio = await blobToBase64(audioBlob);
+
+    const res = await fetch(`${getBaseUrl()}/piano/record`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        notes,
+        audioBlob: base64Audio,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || res.statusText);
+    }
+    return data;
+  }
+  
+  /**
    * 레이어 분리 요청 (POST /api/sound/split)
    * @param {number} trackId
    * @returns {Promise<{ success: boolean, layers?: object, message?: string, error?: string, code?: string }>}
@@ -102,4 +149,17 @@ const getBaseUrl = () =>
   export async function getBlendStatus(blendId) {
     const res = await fetch(`${getBaseUrl()}/sound/blend/${blendId}/status`);
     return res.json().catch(() => ({}));
+  }
+
+  /**
+   * 음악 URL 해석 (이미지 등)
+   * @param {string} path - 서버 경로 (예: /uploads/covers/...)
+   * @returns {string} 전체 URL
+   */
+  export function resolveMusicUrl(path) {
+    if (!path) return '';
+    if (path.startsWith('http')) return path;
+    const baseUrl = getBaseUrl().replace('/api', ''); // API Base에서 /api 제거
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    return `${baseUrl}${cleanPath}`;
   }

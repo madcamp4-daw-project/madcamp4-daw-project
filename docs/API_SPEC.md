@@ -468,6 +468,13 @@ http://localhost:3001/api
 
 > **담당**: 개발자 B (프론트엔드). API 호출·에러 처리·재시도·로딩 UI는 `client/src/api/audioApi.js` 및 훅(`useUploadProgress`, `useAudioPlayer`)에서 구현합니다.
 
+### 9.0 API 엔드포인트 사용 가이드
+
+- **범용 업로드**: `uploadSound()` - 일반 오디오 파일 업로드 시 사용 (POST /api/sound/upload)
+- **피아노 전용**: `uploadPianoRecord()` - 신스 피아노 녹음 저장 시 사용 (POST /api/piano/record)
+  - `CompositionKeyboard.jsx`에서 녹음 시 자동으로 노트 배열 추적 및 전송
+  - notes 배열 정보를 포함하여 더 풍부한 메타데이터 제공
+
 ### 9.1 Base URL 및 환경 변수
 
 - **개발**: `VITE_API_BASE_URL` 또는 동일 의미의 env 사용 (예: `http://localhost:3001/api`).

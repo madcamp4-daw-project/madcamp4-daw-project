@@ -39,6 +39,8 @@ madcamp04/
 │   │   ├── hooks/                     # 커스텀 훅 (개발자 B)
 │   │   │   ├── useAudioPlayer.js       # 재생 제어
 │   │   │   └── useUploadProgress.js    # 업로드 진행률
+│   │   ├── utils/                     # 유틸리티 함수 (개발자 B)
+│   │   │   └── instrumentManager.js    # Tone.js 기반 악기 관리자
 │   │   ├── store/
 │   │   │   └── useDJStore.js           # DJ 상태 관리 (Zustand)
 │   │   └── api/
@@ -99,7 +101,8 @@ madcamp04/
   - 가상 피아노 키보드 렌더링
   - 옥타브 시프트 (-2 ~ +2)
   - 메트로놈 통합
-  - 녹음 기능
+  - 녹음 기능 (useUploadProgress 훅 사용, uploadPianoRecord API 사용)
+  - 노트 배열 추적 (녹음 시 노트 정보 기록)
   - 키보드 입력 핸들러
   - 펄스 애니메이션 + 글로우 효과
 
@@ -199,7 +202,8 @@ madcamp04/
 - **담당자**: 개발자 B
 - **설명**: 오디오 API 클라이언트 (에러 핸들링·재시도 포함)
 - **주요 함수**:
-  - `uploadSound()`: 오디오 파일 업로드
+  - `uploadSound()`: 범용 오디오 파일 업로드 (POST /api/sound/upload)
+  - `uploadPianoRecord()`: 피아노 전용 녹음 저장 (POST /api/piano/record) - notes 배열 + audioBlob
   - `splitLayers()`: 레이어 분리 요청
   - `inspectSound()`: 오디오 분석 요청
   - `createBlend()`: 블렌드 생성 요청
@@ -354,7 +358,7 @@ AppLayout.jsx (라우팅: SynthPage, MixPage)
 
 CompositionKeyboard.jsx (SynthPiano)
   └── useDJStore (Zustand)
-  └── Tone.js, audioApi.js
+  └── Tone.js, audioApi.js (uploadPianoRecord 사용)
   └── useUploadProgress (녹음 업로드)
 
 DJMachine.jsx (MixController)

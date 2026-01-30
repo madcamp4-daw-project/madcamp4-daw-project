@@ -2,19 +2,10 @@ import React from 'react';
 import { useDJStore } from '../../store/useDJStore';
 
 /**
- * SoundDial 컴포넌트 속성
- */
-interface SoundDialProps {
-  unitIdx: 1 | 2;
-  dialType: 'mid' | 'bass' | 'filter';
-  title: string;
-}
-
-/**
  * SoundDial 컴포넌트
  * EQ 및 필터 조절용 회전 다이얼
  */
-const SoundDial: React.FC<SoundDialProps> = ({ unitIdx, dialType, title }) => {
+const SoundDial = ({ unitIdx, dialType, title }) => {
   // 해당 다이얼 값만 구독 (불필요한 리렌더링 방지)
   const dialValue = useDJStore((state) => 
     unitIdx === 1 ? state.deck1[dialType] : state.deck2[dialType]
@@ -38,9 +29,9 @@ const SoundDial: React.FC<SoundDialProps> = ({ unitIdx, dialType, title }) => {
           className="sound-dial__ring"
           style={
             {
-              ['--arcSweep' as any]: `${arcSweep}deg`,
-              ['--ringColor' as any]: ringColor,
-            } as React.CSSProperties
+              '--arcSweep': `${arcSweep}deg`,
+              '--ringColor': ringColor,
+            }
           }
           aria-hidden="true"
         />

@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { uploadSound } from '../../api/audioApi';
+import React, { useState, useEffect, useRef } from 'react';
+import { uploadPianoRecord } from '../../api/audioApi';
 import { useDJStore } from '../../store/useDJStore';
+import { useUploadProgress } from '../../hooks/useUploadProgress';
 import styles from './CompositionKeyboard.module.css';
 
 /**
  * SynthPiano 컴포넌트
- * 가상 피아노 키보드 - 네온 글로우 테마 + 펄스 애니메이션 적용
+ * 가상 피아노 키보드 - Classic B/W Theme + Draggable Control Panel
  */
 const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClose }) => {
     // 전역 상태
@@ -23,7 +24,21 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
 
     // 녹음 상태
     const [isRecording, setIsRecording] = useState(false);
-    const [isUploading, setIsUploading] = useState(false);
+    
+    // 업로드 진행률 훅 사용
+    const { isUploading, uploadFile } = useUploadProgress();
+    
+    // 녹음 시작 시간 및 노트 기록
+    const recordingStartTimeRef = useRef(null);
+    const recordedNotesRef = useRef([]);
+
+    // 악기 상태
+    const [instrumentType, setInstrumentType] = useState('synth');
+
+    // 드래그 상태
+    const [isDragging, setIsDragging] = useState(false);
+    const dragOffset = useRef({ x: 0, y: 0 });
+    const panelRef = useRef(null);
 
     // 프리뷰 모드 초기화
     useEffect(() => {
@@ -31,7 +46,7 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
             instrumentManager.loadPreview(type, preset);
             return () => instrumentManager.closePreview();
         }
-    }, [previewMode, type, preset]);
+    }, [previewMode, type, preset, instrumentManager]);
 
     // 언마운트 시 메트로놈 정지
     useEffect(() => {
@@ -42,10 +57,15 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
         };
     }, []);
 
+    // 악기 변경 핸들러
+    const handleInstrumentChange = (e) => {
+        const type = e.target.value;
+        setInstrumentType(type);
+        instrumentManager.setInstrument(type);
+    };
+
     /**
      * 듀얼 Row 레이아웃 키 생성
-     * Row 1 (하단): Z X C V B N M (C3 - B3)
-     * Row 2 (상단): Q W E R T Y U (C4 - B4)
      */
     const buildKeyLayout = () => {
         const ivoryKeys = [];
@@ -121,6 +141,18 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
                 instrumentManager.startNote(padId, note);
             }
             setPressedKeys(prev => new Set(prev).add(note));
+            
+            // 녹음 중이면 노트 시작 시간 기록
+            if (isRecording && recordingStartTimeRef.current !== null) {
+                const currentTime = Date.now();
+                const relativeTime = (currentTime - recordingStartTimeRef.current) / 1000;
+                recordedNotesRef.current.push({
+                    time: relativeTime,
+                    note: note,
+                    duration: 0,
+                    startTime: currentTime,
+                });
+            }
         }
     };
 
@@ -136,6 +168,17 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
             next.delete(note);
             return next;
         });
+        
+        // 녹음 중이면 노트 duration 업데이트
+        if (isRecording && recordingStartTimeRef.current !== null) {
+            const currentTime = Date.now();
+            const noteRecord = recordedNotesRef.current.find(
+                n => n.note === note && n.duration === 0
+            );
+            if (noteRecord) {
+                noteRecord.duration = (currentTime - noteRecord.startTime) / 1000;
+            }
+        }
     };
 
     const triggerLibraryRefresh = useDJStore(state => state.triggerLibraryRefresh);
@@ -147,30 +190,84 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
             setIsRecording(false);
 
             if (blob) {
-                const defaultName = `${type}_${new Date().toISOString().slice(0, 10)}`;
+                const now = new Date();
+                const dateStr = now.toISOString().slice(0, 10);
+                const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '-');
+                const defaultName = `${type}_${dateStr}_${timeStr}`;
                 const name = window.prompt("녹음 파일 이름을 입력하세요:", defaultName);
 
-                if (!name) return;
+                if (!name) {
+                    recordedNotesRef.current = [];
+                    recordingStartTimeRef.current = null;
+                    return;
+                }
 
-                setIsUploading(true);
                 try {
-                    const file = new File([blob], `${name}.webm`, { type: 'audio/webm' });
-                    const category = type === 'synth' ? 'synth' : 'instrument';
-                    await uploadSound(file, { title: name });
+                    const validNotes = recordedNotesRef.current
+                        .filter(n => n.duration > 0)
+                        .map(({ startTime, ...rest }) => rest);
+
+                    await uploadFile(uploadPianoRecord, {
+                        title: name,
+                        notes: validNotes,
+                        audioBlob: blob,
+                    });
+                    
                     triggerLibraryRefresh();
                     alert('라이브러리에 저장 완료!');
                 } catch (err) {
                     console.error(err);
                     alert('저장 실패');
                 } finally {
-                    setIsUploading(false);
+                    recordedNotesRef.current = [];
+                    recordingStartTimeRef.current = null;
                 }
             }
         } else {
+            recordingStartTimeRef.current = Date.now();
+            recordedNotesRef.current = [];
             await instrumentManager.startRecording();
             setIsRecording(true);
         }
     };
+
+    // 드래그 핸들러
+    const handleMouseDown = (e) => {
+        if (panelRef.current) {
+            setIsDragging(true);
+            const rect = panelRef.current.getBoundingClientRect();
+            dragOffset.current = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+    };
+
+    useEffect(() => {
+        const movePanel = (e) => {
+            if (!isDragging || !panelRef.current) return;
+            
+            const x = e.clientX - dragOffset.current.x;
+            const y = e.clientY - dragOffset.current.y;
+            
+            panelRef.current.style.right = 'auto'; // CSS right 무효화
+            panelRef.current.style.left = `${x}px`;
+            panelRef.current.style.top = `${y}px`;
+        };
+
+        const stopDrag = () => {
+            setIsDragging(false);
+        };
+
+        if (isDragging) {
+            window.addEventListener('mousemove', movePanel);
+            window.addEventListener('mouseup', stopDrag);
+        }
+        return () => {
+            window.removeEventListener('mousemove', movePanel);
+            window.removeEventListener('mouseup', stopDrag);
+        };
+    }, [isDragging]);
 
     // 키보드 이벤트 핸들러
     useEffect(() => {
@@ -178,7 +275,6 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
             if (e.repeat) return;
             const char = e.key.toLowerCase();
 
-            // 옥타브 시프트
             if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 setOctaveShift(prev => Math.min(prev + 1, MAX_SHIFT));
@@ -206,74 +302,94 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
         };
-    }, [pressedKeys, previewMode, octaveShift]);
+    }, [pressedKeys, previewMode, octaveShift, ivoryKeys, ebonyKeys]);
 
     return (
         <div className={styles.synthOverlay}>
-            {/* 헤더 */}
-            <div className={styles.headerArea}>
-                <h1 className={styles.mainTitle}>
-                    {previewMode ? `PREVIEW: ${type.toUpperCase()}` : 'SYNTH KEYBOARD'}
-                </h1>
+            {/* 타이틀 (배경 중앙 고정) */}
+            <h1 className={styles.mainTitle} style={{ position: 'absolute', top: '10%', zIndex: 0 }}>
+                {previewMode ? `PREVIEW MODE` : 'SYNTH KEYBOARD'}
+            </h1>
 
-                {/* 컨트롤 바 */}
-                <div className={styles.controlBar}>
+            {/* 컨트롤 패널 (Draggable) */}
+            <div 
+                className={styles.controlBar} 
+                ref={panelRef}
+                onMouseDown={handleMouseDown}
+            >
+                <div className={styles.controlHeader}>Control Panel</div>
 
-                    {/* 옥타브 컨트롤 */}
-                    <div className={styles.octaveGroup}>
-                        <span className={styles.octaveTag}>OCTAVE</span>
-                        <button
-                            onClick={() => setOctaveShift(p => Math.max(p - 1, MIN_SHIFT))}
-                            className={`${styles.ctrlBtn} ${octaveShift <= MIN_SHIFT ? styles.disabled : ''}`}
-                        >
-                            - <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>(↓)</span>
-                        </button>
+                {/* 악기 선택 */}
+                <select 
+                    className={styles.instrumentSelect} 
+                    value={instrumentType} 
+                    onChange={handleInstrumentChange}
+                    onMouseDown={(e) => e.stopPropagation()} // 드래그 방지
+                >
+                    <option value="synth">Synth</option>
+                    <option value="piano">Grand Piano</option>
+                </select>
 
-                        <div className={styles.octaveValue} style={{
-                            color: octaveShift === 0 ? '#fff' : (octaveShift > 0 ? '#00ffff' : '#ffaa00')
-                        }}>
-                            {octaveShift > 0 ? `+${octaveShift}` : octaveShift}
-                        </div>
+                <div className={styles.separator}></div>
 
-                        <button
-                            onClick={() => setOctaveShift(p => Math.min(p + 1, MAX_SHIFT))}
-                            className={`${styles.ctrlBtn} ${octaveShift >= MAX_SHIFT ? styles.disabled : ''}`}
-                        >
-                            + <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>(↑)</span>
-                        </button>
+                {/* 옥타브 컨트롤 */}
+                <div className={styles.octaveGroup}>
+                    <span className={styles.octaveTag}>OCTAVE</span>
+                    <button
+                        onClick={() => setOctaveShift(p => Math.max(p - 1, MIN_SHIFT))}
+                        className={`${styles.ctrlBtn} ${octaveShift <= MIN_SHIFT ? styles.disabled : ''}`}
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        - (↓)
+                    </button>
+
+                    <div className={styles.octaveValue} style={{
+                        color: octaveShift === 0 ? '#333' : (octaveShift > 0 ? '#007bff' : '#ff9800')
+                    }}>
+                        {octaveShift > 0 ? `+${octaveShift}` : octaveShift}
                     </div>
 
-                    <div className={styles.separator}></div>
+                    <button
+                        onClick={() => setOctaveShift(p => Math.min(p + 1, MAX_SHIFT))}
+                        className={`${styles.ctrlBtn} ${octaveShift >= MAX_SHIFT ? styles.disabled : ''}`}
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        + (↑)
+                    </button>
+                </div>
 
-                    {/* 녹음 및 닫기 */}
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        {/* 메트로놈 */}
+                <div className={styles.separator}></div>
+
+                {/* 녹음 및 닫기 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                    {/* 메트로놈 */}
+                    <button
+                        onClick={() => setIsMetronomeOn(!isMetronomeOn)}
+                        className={`${styles.actionButton}`}
+                        style={{ background: isMetronomeOn ? '#ffeb3b' : '#f0f0f0', color: '#333', border: '1px solid #ccc' }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        {isMetronomeOn ? '⏰ METRONOME ON' : '⏰ METRONOME OFF'}
+                    </button>
+
+                    {previewMode && (
                         <button
-                            onClick={() => setIsMetronomeOn(!isMetronomeOn)}
-                            className={`${styles.actionButton}`}
-                            style={{ background: isMetronomeOn ? 'var(--color-accent-primary)' : '#444' }}
-                            title="메트로놈 토글"
+                            onClick={toggleRecording}
+                            disabled={isUploading}
+                            className={`${styles.actionButton} ${styles.recButton} ${isRecording ? styles.recording : ''}`}
+                            onMouseDown={(e) => e.stopPropagation()}
                         >
-                            ⏰
+                            {isUploading ? 'SAVING...' : (isRecording ? 'STOP REC' : 'START REC')}
                         </button>
+                    )}
 
-                        {previewMode && (
-                            <button
-                                onClick={toggleRecording}
-                                disabled={isUploading}
-                                className={`${styles.actionButton} ${styles.recButton} ${isRecording ? styles.recording : ''}`}
-                            >
-                                {isUploading ? '저장중...' : (isRecording ? 'STOP' : <>REC ●</>)}
-                            </button>
-                        )}
-
-                        <button
-                            onClick={onClose}
-                            className={`${styles.actionButton} ${styles.exitButton}`}
-                        >
-                            CLOSE
-                        </button>
-                    </div>
+                    <button
+                        onClick={onClose}
+                        className={`${styles.actionButton} ${styles.exitButton}`}
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        CLOSE PANEL
+                    </button>
                 </div>
             </div>
 
@@ -292,7 +408,6 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
                     pressedKeys={pressedKeys}
                     triggerKey={triggerKey}
                     releaseKey={releaseKey}
-                    rowName="UPPER"
                 />
 
                 {/* Row 1 (하단) - C3-E4 */}
@@ -302,7 +417,6 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
                     pressedKeys={pressedKeys}
                     triggerKey={triggerKey}
                     releaseKey={releaseKey}
-                    rowName="LOWER"
                 />
 
             </div>
@@ -312,9 +426,8 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
 
 /**
  * KeyboardRow 컴포넌트
- * 단일 옥타브 Row
  */
-const KeyboardRow = ({ ivoryKeys, ebonyKeys, pressedKeys, triggerKey, releaseKey, rowName }) => {
+const KeyboardRow = ({ ivoryKeys, ebonyKeys, pressedKeys, triggerKey, releaseKey }) => {
     return (
         <div className={styles.keyRow}>
             {/* 흰건반 */}
@@ -342,10 +455,11 @@ const KeyboardRow = ({ ivoryKeys, ebonyKeys, pressedKeys, triggerKey, releaseKey
 
             {/* 검은건반 오버레이 */}
             <div className={styles.ebonyKeyArea}>
-                <div style={{ position: 'relative', width: `${ivoryKeys.length * 62}px`, height: '100%' }}>
+                <div style={{ position: 'relative', width: `${ivoryKeys.length * 50}px`, height: '100%' }}>
                     {ebonyKeys.map((key) => {
                         const isPressed = pressedKeys.has(key.note);
-                        const leftPos = (key.octaveIdx * 62) + 38;
+                        // 간단한 위치 계산 (50px = ivoryKey width + margin approximately)
+                        const leftPos = (key.octaveIdx * 50) + 32;
 
                         return (
                             <div

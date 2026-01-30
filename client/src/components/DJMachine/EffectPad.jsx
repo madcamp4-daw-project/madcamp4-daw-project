@@ -1,21 +1,10 @@
 import React from 'react';
 
 /**
- * FxButton 컴포넌트 속성
- */
-interface FxButtonProps {
-  text: string;
-  shortcutKey?: string;
-  pressed?: boolean;
-  style?: 'red' | 'purple' | 'blue' | 'gray';
-  extraClass?: string;
-}
-
-/**
  * FxButton 컴포넌트
  * 이펙트 및 CUE 트리거 버튼
  */
-const FxButton: React.FC<FxButtonProps> = ({ text, shortcutKey, pressed, style = 'gray', extraClass = '' }) => {
+const FxButton = ({ text, shortcutKey, pressed, style = 'gray', extraClass = '' }) => {
   return (
     <button
       type="button"

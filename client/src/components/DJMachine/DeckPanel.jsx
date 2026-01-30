@@ -1,37 +1,16 @@
 import React from 'react';
 import { useDJStore } from '../../store/useDJStore';
-import type { FxType } from '../../store/useDJStore';
-import { resolveMusicUrl } from '../../api/musicApi';
-import SoundDial from './SoundDial';
-import VinylPlayer from './VinylPlayer';
-import FxButton from './FxButton';
-import AudioVisualizer from './AudioVisualizer';
-
-/**
- * 트랙 정보 인터페이스
- */
-interface TrackInfo {
-  title: string;
-  artist: string;
-  bpm: number;
-  elapsed: string;
-  total: string;
-}
-
-/**
- * TrackDeck 컴포넌트 속성
- */
-interface TrackDeckProps {
-  unitIdx: 1 | 2;
-  position: 'left' | 'right';
-  info: TrackInfo;
-}
+import { resolveMusicUrl } from '../../api/audioApi';
+import SoundDial from './EQKnob';
+import VinylPlayer from './Turntable';
+import FxButton from './EffectPad';
+import AudioVisualizer from './WaveformBar';
 
 /**
  * TrackDeck 컴포넌트
  * 개별 트랙 덱 패널 - 배치 변경: 노브(상단) → 턴테이블 → 웨이브폼 → 패드 → 헤더(하단)
  */
-const TrackDeck: React.FC<TrackDeckProps> = ({ unitIdx, position, info }) => {
+const TrackDeck = ({ unitIdx, position, info }) => {
   // 스토어에서 현재 트랙 유닛 상태 가져오기
   const trackUnit = useDJStore((s) => (unitIdx === 1 ? s.deck1 : s.deck2));
   const cue1Active = useDJStore((s) => !!s.activeControls?.[`deck${unitIdx}:cue1`]);
@@ -42,7 +21,7 @@ const TrackDeck: React.FC<TrackDeckProps> = ({ unitIdx, position, info }) => {
   const cue2Key = unitIdx === 1 ? '2' : '0';
 
   // FX 버튼 배열 (2x3 그리드로 변경)
-  const fxButtons: Array<{ text: string; shortcutKey: string; style: 'gray' | 'red'; fx?: FxType; cueIdx?: 1 | 2 }> = [
+  const fxButtons = [
     { text: 'cue 1', shortcutKey: cue1Key, style: 'gray', cueIdx: 1 },
     { text: 'slicer', shortcutKey: 'num4', style: 'gray', fx: 'SLICER' },
     { text: 'cue 2', shortcutKey: cue2Key, style: 'gray', cueIdx: 2 },
