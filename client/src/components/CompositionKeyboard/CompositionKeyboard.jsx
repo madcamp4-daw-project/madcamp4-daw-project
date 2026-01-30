@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { uploadFile } from '../../api/upload';
-import useStore from '../../store/useStore';
-import { audioEngine } from '../../audio/AudioEngine';
-import styles from './SynthPiano.module.css';
+import { uploadSound } from '../../api/audioApi';
+import { useDJStore } from '../../store/useDJStore';
+import styles from './CompositionKeyboard.module.css';
 
 /**
  * SynthPiano 컴포넌트
@@ -10,10 +9,10 @@ import styles from './SynthPiano.module.css';
  */
 const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClose }) => {
     // 전역 상태
-    const bpm = useStore(state => state.bpm);
-    const setBpm = useStore(state => state.setBpm);
-    const isMetronomeOn = useStore(state => state.isMetronomeOn);
-    const setIsMetronomeOn = useStore(state => state.setIsMetronomeOn);
+    const bpm = useDJStore(state => state.bpm);
+    const setBpm = useDJStore(state => state.setBpm);
+    const isMetronomeOn = useDJStore(state => state.isMetronomeOn);
+    const setIsMetronomeOn = useDJStore(state => state.setIsMetronomeOn);
 
     // 옥타브 시프트 상태
     const [octaveShift, setOctaveShift] = useState(0);
@@ -37,9 +36,9 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
     // 언마운트 시 메트로놈 정지
     useEffect(() => {
         return () => {
-            if (useStore.getState().isMetronomeOn) {
-                useStore.getState().setIsMetronomeOn(false);
-            }
+            if (useDJStore.getState().isMetronomeOn) {
+                useDJStore.getState().setIsMetronomeOn(false);
+              }
         };
     }, []);
 
@@ -139,7 +138,7 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
         });
     };
 
-    const triggerLibraryRefresh = useStore(state => state.triggerLibraryRefresh);
+    const triggerLibraryRefresh = useDJStore(state => state.triggerLibraryRefresh);
 
     // 녹음 토글
     const toggleRecording = async () => {
@@ -157,7 +156,7 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
                 try {
                     const file = new File([blob], `${name}.webm`, { type: 'audio/webm' });
                     const category = type === 'synth' ? 'synth' : 'instrument';
-                    await uploadFile(file, category);
+                    await uploadSound(file, { title: name });
                     triggerLibraryRefresh();
                     alert('라이브러리에 저장 완료!');
                 } catch (err) {

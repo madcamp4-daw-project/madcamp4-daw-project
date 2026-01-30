@@ -1,6 +1,7 @@
 import React from "react";
 //react 사용할때는 항상 이걸 import 해주자
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import ErrorBoundary from './components/common/ErrorBoundary';  // ← 이 줄 추가
 import AppLayout from './components/Layout/AppLayout';
 import SynthPage from './pages/SynthPage';
 import MixPage from './pages/MixPage';
@@ -10,7 +11,8 @@ import MixPage from './pages/MixPage';
 
 
 function App() {
-    return (
+  return (
+    <ErrorBoundary>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<AppLayout />}>
@@ -20,7 +22,8 @@ function App() {
           </Route>
         </Routes>
       </BrowserRouter>
-    );
-  }
+    </ErrorBoundary>
+  );
+}
   export default App;
 //이렇게 App이란 이름으로 밖으로 export도 꼭 해줘야 다른쪽에서 router로 파일위치(주소)잡을 수 있음
