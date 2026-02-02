@@ -1,0 +1,17 @@
+{
+    "sourceLayers": {
+        "vocals": "server/output/htdemucs/1769835817086/vocals.wav",
+        "drums": "server/output/htdemucs/1769835817086/drums.wav",
+        "bass": "server/output/htdemucs/1769835817086/bass.wav",
+        "other": "server/output/htdemucs/1769835817086/other.wav"
+    },
+    "targetLayers": {
+        "vocals": "server/output/htdemucs/1769836001083/vocals.wav",
+        "drums": "server/output/htdemucs/1769836001083/drums.wav",
+        "bass": "server/output/htdemucs/1769836001083/bass.wav",
+        "other": "server/output/htdemucs/1769836001083/other.wav"
+    },
+    "sourceAnalysis": { "bpm": 184.5 },
+    "targetAnalysis": { "bpm": 161.5 },
+    "blendPoint": 12
+}

@@ -1,121 +1,104 @@
 # server/services/stem_separation.py
-# Demucs AI 모델을 활용한 오디오 레이어 분리
-# 리팩토링됨 - 함수명/변수명 변경
+# Demucs CLI Wrapper (Shape 에러 원천 차단 버전)
 
-import torch
-from demucs.api import Separator
-import soundfile as sf
+import sys
 import os
-import logging
+import subprocess
+import json
+import shutil
 
-# 로깅 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# 한글 깨짐 방지
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
 
-def split_track_layers(source_file, dest_folder, compute_device='cpu'):
-    """
-    Demucs AI 모델을 활용한 오디오 레이어 분리
+def separate_stems(track_filename):
+    # 1. 경로 설정
+    # 현재 파일(stem_separation.py)의 위치를 기준으로 경로를 잡습니다.
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    uploads_dir = os.path.join(base_dir, 'uploads', 'tracks')
+    output_dir = os.path.join(base_dir, 'output')
     
-    Args:
-        source_file: 입력 오디오 파일 경로
-        dest_folder: 출력 디렉토리 경로
-        compute_device: 'cpu' 또는 'cuda' (GPU 사용 시)
-    
-    Returns:
-        dict: {
-            'drums': str (파일 경로),
-            'bass': str,
-            'vocals': str,
-            'other': str
-        }
-    
-    Raises:
-        FileNotFoundError: 입력 파일을 찾을 수 없는 경우
-        RuntimeError: 모델 실행 중 오류 발생 시
-    """
+    # ffmpeg가 같은 폴더에 있다면 경로에 추가 (선택사항)
+    os.environ["PATH"] += os.pathsep + os.path.dirname(os.path.abspath(__file__))
+
+    # 2. 입력 파일 찾기
+    input_path = os.path.join(uploads_dir, track_filename)
+
+    # (중요) 만약 파일이 없으면 확장자를 바꿔서라도 찾아봄
+    if not os.path.exists(input_path):
+        # 혹시 .mp3가 빠졌나?
+        if os.path.exists(input_path + ".mp3"):
+            input_path += ".mp3"
+        # 혹시 .wav가 빠졌나?
+        elif os.path.exists(input_path + ".wav"):
+            input_path += ".wav"
+        else:
+            print(json.dumps({"error": f"File not found: {input_path}"}))
+            return
+
+    # 3. Demucs 명령어 구성 (API 아님, CLI 실행)
+    # -n htdemucs: 고성능 모델
+    # --two-stems=vocals: (옵션) 보컬/반주 2개로만 나눌거면 추가 (속도 2배 빠름) -> 지금은 4개 다 나눔
+    cmd = [
+        sys.executable, "-m", "demucs",
+        "-n", "htdemucs",  # 모델명
+        "-d", "cuda",
+        "--out", output_dir, # 출력 폴더
+        input_path         # 입력 파일
+    ]
+
     try:
-        # 입력 파일 존재 확인
-        if not os.path.exists(source_file):
-            raise FileNotFoundError(f"오디오 파일을 찾을 수 없습니다: {source_file}")
+        # 로그 출력 (Node.js가 볼 수 있게 stderr로)
+        sys.stderr.write(f"Separating track: {os.path.basename(input_path)}...\n")
         
-        # 출력 디렉토리 생성
-        os.makedirs(dest_folder, exist_ok=True)
-        logger.info(f"출력 디렉토리 생성: {dest_folder}")
+        # 4. 실행 (여기서 모든 마법이 일어남)
+        # capture_output=False로 하면 터미널에 진행바가 보입니다.
+        process = subprocess.run(cmd, check=True, text=True)
         
-        # Demucs Separator 초기화
-        # htdemucs 모델 사용 (Hybrid Transformer Demucs)
-        # segment=12: 12초 청크로 분할하여 처리 (메모리 효율성)
-        logger.info(f"레이어 분리 엔진 초기화 중... (device: {compute_device})")
-        stem_processor = Separator(
-            model="htdemucs",
-            segment=12,
-            device=compute_device,
-            shifts=1  # 시프트 기법으로 품질 향상
-        )
+        # 5. 결과 경로 정리
+        # Demucs는 output/htdemucs/파일이름/ 폴더에 저장함
+        # 파일이름에서 확장자(.mp3)를 뗀 이름이 폴더명이 됨
+        track_name_only = os.path.splitext(os.path.basename(input_path))[0]
+        result_path = os.path.join(output_dir, "htdemucs", track_name_only)
         
-        # 오디오 파일 분리 실행
-        logger.info(f"레이어 분리 시작: {source_file}")
-        origin, separated_layers = stem_processor.separate_audio_file(source_file)
-        
-        # 분리된 레이어 저장
-        output_layers = {}
-        sample_rate = 44100
-        
-        for layer_name, layer_audio in separated_layers.items():
-            output_path = os.path.join(dest_folder, f"{layer_name}.wav")
-            
-            # Tensor를 numpy로 변환 후 저장
-            if layer_audio.dim() == 2:
-                # 스테레오: (2, Time)
-                audio_array = layer_audio.cpu().numpy().T
-            else:
-                # 모노: (Time,)
-                audio_array = layer_audio.cpu().numpy()
-            
-            # WAV 파일로 저장
-            sf.write(output_path, audio_array, sample_rate)
-            output_layers[layer_name] = output_path
-            logger.info(f"레이어 저장 완료: {layer_name} -> {output_path}")
-        
-        logger.info("레이어 분리 완료")
-        return output_layers
-        
+        if os.path.exists(result_path):
+            result = {
+                "message": "Separation complete",
+                "path": result_path,
+                "stems": {
+                    "vocals": os.path.join(result_path, "vocals.wav"),
+                    "drums": os.path.join(result_path, "drums.wav"),
+                    "bass": os.path.join(result_path, "bass.wav"),
+                    "other": os.path.join(result_path, "other.wav")
+                }
+            }
+            print(json.dumps(result, ensure_ascii=False))
+        else:
+            print(json.dumps({"error": "Separation finished but output folder not found."}))
+
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write(f"Demucs Failed: {e}\n")
+        print(json.dumps({"error": "Demucs execution failed. Check if FFmpeg is installed."}))
     except Exception as e:
-        logger.error(f"레이어 분리 중 오류 발생: {str(e)}")
-        raise RuntimeError(f"레이어 분리 실패: {str(e)}")
+        sys.stderr.write(f"Unexpected Error: {e}\n")
+        print(json.dumps({"error": str(e)}))
 
-# CPU 전용 버전
-def split_layers_cpu(source_file, dest_folder):
-    """CPU만 사용하는 버전 (GPU 없이도 동작)"""
-    return split_track_layers(source_file, dest_folder, compute_device='cpu')
-
-# GPU 사용 버전
-def split_layers_gpu(source_file, dest_folder):
-    """GPU 사용 버전 (CUDA 사용 가능 시)"""
-    if torch.cuda.is_available():
-        logger.info("GPU 모드로 실행")
-        return split_track_layers(source_file, dest_folder, compute_device='cuda')
-    else:
-        logger.warning("GPU를 사용할 수 없습니다. CPU 모드로 전환합니다.")
-        return split_track_layers(source_file, dest_folder, compute_device='cpu')
-
-# CLI 인터페이스
 if __name__ == '__main__':
-    import sys
-    import json
-    
-    if len(sys.argv) < 3:
-        print("사용법: python stem_separation.py <source_file> <dest_folder> [device]")
+    if len(sys.argv) < 2:
+        print(json.dumps({"error": "No trackId provided"}))
         sys.exit(1)
-    
-    source_file = sys.argv[1]
-    dest_folder = sys.argv[2]
-    compute_device = sys.argv[3] if len(sys.argv) > 3 else 'cpu'
-    
+        
+    # Node.js에서 받은 인자 처리
     try:
-        layers = split_track_layers(source_file, dest_folder, compute_device)
-        # JSON 형식으로 출력
-        print(json.dumps({'layers': layers}))
+        input_arg = sys.argv[1]
+        target_file = input_arg
+        
+        # JSON 문자열로 들어온 경우 파싱
+        if input_arg.startswith('{'):
+            data = json.loads(input_arg)
+            target_file = data.get('trackId') or data.get('fileName')
+            
+        separate_stems(target_file)
+        
     except Exception as e:
-        print(json.dumps({'error': str(e)}), file=sys.stderr)
-        sys.exit(1)
+        print(json.dumps({"error": f"Input parsing error: {str(e)}"}))

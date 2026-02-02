@@ -13,3 +13,9 @@ server/.env
 
 # Server Uploads
 server/uploads/
+
+server/venv
+server/output
+
+server/services/ffmpeg.exe
+server/services/ffprobe.exe
