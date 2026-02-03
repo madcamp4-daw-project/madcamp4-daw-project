@@ -236,7 +236,7 @@ def get_best_loop_segment(y, sr, cut_point, bpm):
     return best_candidate['segment']
 
 # ====================================================
-# 🧨 [Strategy 1] Drop Mix Logic (Trust Vocal Stem)
+# 🧨 [Strategy 1] Drop Mix Logic (Stem Detect -> Full Extract)
 # ====================================================
 def run_drop_mix(y_a, y_a_vocals, y_b, bpm_a, bpm_b, sr, cut_point_a, vocal_end_point):
     print(f"\n🚀 [Strategy: Drop Mix] Extreme Riser Mode!")
@@ -246,65 +246,60 @@ def run_drop_mix(y_a, y_a_vocals, y_b, bpm_a, bpm_b, sr, cut_point_a, vocal_end_
     
     source_chunk = None
     samples_per_beat_a = int(60.0 / bpm_a * sr)
-    
-    # 기본 컷 포인트는 곡의 끝부분이지만...
     actual_cut_point = cut_point_a 
 
     # ----------------------------------------------------
-    # 🔥 [핵심 수정] Vocal Anchor Strategy
+    # 🔥 [핵심] Hybrid Vocal Anchor Strategy
     # ----------------------------------------------------
-    # "스템이 잘 분리되었다"면 vocal_end_point는 정확할 것입니다.
-    # 곡의 끝(cut_point_a)에서 찾지 말고, vocal_end_point 지점을 직접 타격합니다.
     
     if vocal_end_point is not None and vocal_end_point > samples_per_beat_a:
-        # 보컬이 끝나는 지점 바로 앞 1박자를 가져옴
-        vocal_chunk = y_a_vocals[vocal_end_point - samples_per_beat_a : vocal_end_point]
         
-        # 에너지 확인 (혹시 모르니)
-        rms = np.sqrt(np.mean(vocal_chunk**2))
-        print(f"   🎤 Checking Vocal End Point... RMS: {rms:.4f}")
+        # 1. [검사] 보컬 스템(y_a_vocals)만 확인합니다. (정확도 UP)
+        # 반주 소리에 방해받지 않고 오직 목소리 유무만 판단합니다.
+        check_chunk = y_a_vocals[vocal_end_point - samples_per_beat_a : vocal_end_point]
+        rms = np.sqrt(np.mean(check_chunk**2))
         
-        if rms > 0.001: # 아주 작은 소리라도 있으면 채택
-            print("      ✅ Targeted Vocal End Point directly!")
+        print(f"   🎤 Checking Vocal Stem RMS: {rms:.4f}")
+        
+        # 보컬 스템에 소리가 있으면 (목소리가 확실하면)
+        if rms > 0.001: 
+            print("      ✅ Vocal confirmed in Stem!")
             
-            # [볼륨 보정] 스템의 볼륨을 원곡 레벨에 맞춤
-            full_ref = y_a[vocal_end_point - samples_per_beat_a : vocal_end_point]
-            full_rms = np.sqrt(np.mean(full_ref**2))
+            # 2. [추출] 실제 소리는 원곡(y_a)에서 가져옵니다. (사운드 UP)
+            # 이렇게 하면 '목소리'를 감지해서 '반주 포함 소리'를 자르게 됩니다.
+            source_chunk = y_a[vocal_end_point - samples_per_beat_a : vocal_end_point]
             
-            if rms > 0:
-                gain = full_rms / rms
-                gain = np.clip(gain, 1.5, 4.0) # 최대 4배까지 허용 (확실하게 들리게)
-                source_chunk = vocal_chunk * gain
-            else:
-                source_chunk = vocal_chunk * 2.0
+            # 원곡을 쓰므로 게인 증폭은 하지 않습니다 (1.0배)
+            source_chunk = source_chunk * 1.0
             
-            # 🔥 [중요] 실제 자르는 위치를 '보컬이 끝나는 지점'으로 강제 이동
-            # 뒤에 반주가 남았어도 무시하고 여기서 자름 -> 바로 루프 시작
+            # 자르는 위치 이동
             actual_cut_point = vocal_end_point
             print(f"      ✂️ Cut Point Moved: Syncing to Vocal End ({actual_cut_point/sr:.2f}s)")
             
     # ----------------------------------------------------
-    # [Fallback] 만약 vocal_end_point가 이상하면 기존 탐색 로직 가동
+    # [Fallback] Fallback 로직도 똑같이 수정 (검사는 Stem, 추출은 Full)
     # ----------------------------------------------------
     if source_chunk is None:
-        print("   ⚠️ Vocal End Point missed. Scanning backwards from instrumental end...")
-        # (기존의 for loop 탐색 로직 - 비상용)
+        print("   ⚠️ Vocal End Point missed. Scanning backwards...")
         for i in range(16): 
             end = cut_point_a - (samples_per_beat_a * i)
             start = end - samples_per_beat_a
             if start < 0: break
             
-            chunk = y_a_vocals[start:end]
-            rms = np.sqrt(np.mean(chunk**2))
-            if rms > 0.005:
-                # ... (발견 시 처리 로직 동일) ...
-                source_chunk = chunk * 2.0 # 간략화
+            # 1. 검사는 보컬 스템으로
+            stem_chunk = y_a_vocals[start:end]
+            rms_stem = np.sqrt(np.mean(stem_chunk**2))
+            
+            if rms_stem > 0.005: # 보컬 발견!
+                print(f"      ✅ Found Vocal at beat -{i+1}")
+                # 2. 추출은 원곡에서
+                source_chunk = y_a[start:end] 
                 actual_cut_point = end
                 break
 
     # 여전히 없으면 비트
     if source_chunk is None:
-        print("   🥁 Fallback to Beat Loop.")
+        print("   🥁 Fallback to Instrumental Beat.")
         source_chunk = get_best_loop_segment(y_a, sr, cut_point_a, bpm_a)
         if source_chunk is None:
             source_chunk = y_a[cut_point_a - samples_per_beat_a : cut_point_a]
@@ -312,16 +307,13 @@ def run_drop_mix(y_a, y_a_vocals, y_b, bpm_a, bpm_b, sr, cut_point_a, vocal_end_
     # ----------------------------------------------------
     # Tightening & Ramp (50x Extreme)
     # ----------------------------------------------------
-    # 루프 타이트닝
     tight_len = int(len(source_chunk) * 0.97)
     source_chunk = source_chunk[:tight_len]
 
-    # 12마디 반복
     bars = 12 
     repeats = bars * 4 
     raw_bridge = np.tile(source_chunk, repeats)
     
-    # 시작 속도 5% 부스트
     adjusted_start_bpm = bpm_a * 1.05 
     
     print(f"   ⏱️ Generating Bridge ({bars} bars)...")
@@ -335,15 +327,12 @@ def run_drop_mix(y_a, y_a_vocals, y_b, bpm_a, bpm_b, sr, cut_point_a, vocal_end_
         steps=repeats
     )
     
-    # 이펙트
     filtered_bridge = apply_high_pass(ramped_bridge, sr, cutoff=400)
     fade_in = np.linspace(0.6, 1.0, len(filtered_bridge))
     final_bridge = filtered_bridge * fade_in
     
-    # Track B 무음 제거
     y_b_trimmed, _ = librosa.effects.trim(y_b, top_db=20)
-
-    # Hard Cut 연결
+    
     part_1 = smooth_concatenate([y_a[:actual_cut_point], final_bridge], fade_samples=512)
     final_mix = np.concatenate([part_1, y_b_trimmed])
     
