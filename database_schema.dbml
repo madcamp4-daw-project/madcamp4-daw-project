@@ -1,0 +1,219 @@
+// Web-DAW Database Schema
+// Generated for dbdiagram.io
+// Project: WALL: Web-App Launchpad and Looper
+
+Table Users {
+  id integer [pk, increment, note: 'Primary key']
+  google_id varchar(255) [unique, note: 'Google OAuth ID']
+  sns_id varchar(255) [note: 'Legacy or alternative SNS ID']
+  email varchar(255) [not null, unique, note: 'User email']
+  nickname varchar(255) [not null, note: 'Display name']
+  avatar_url text [note: 'Profile image URL']
+  bio varchar(255) [note: 'User bio/description']
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+  updated_at datetime [default: `CURRENT_TIMESTAMP`]
+  
+  Note: 'User accounts for authentication and profile management'
+}
+
+Table Presets {
+  id integer [pk, increment]
+  user_id integer [note: 'Owner of the preset']
+  title varchar(255) [not null, note: 'Preset name']
+  bpm integer [default: 120, note: 'Beats per minute']
+  settings json [note: 'Global settings: mixerLevels, effects, launchQuantization, theme, etc.']
+  master_volume float [default: 0.7, note: 'Master volume (0.0 ~ 1.0)']
+  is_quantized boolean [default: true, note: 'Quantization enabled']
+  parent_preset_id integer [note: 'Original preset ID if forked (NULL if original)']
+  is_public boolean [default: false, note: 'Public visibility']
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+  updated_at datetime [default: `CURRENT_TIMESTAMP`]
+  
+  Note: 'User-created presets containing pad mappings and settings'
+}
+
+Table KeyMappings {
+  id integer [pk, increment]
+  preset_id integer [note: 'Belongs to preset']
+  key_char varchar(10) [not null, note: 'Pad ID (0-63)']
+  mode varchar(20) [default: 'one-shot', note: 'one-shot, gate, toggle, or loop']
+  volume float [default: 0, note: 'Pad volume']
+  type varchar(20) [default: 'sample', note: 'sample or synth']
+  note varchar(10) [note: 'Musical note (e.g., C4)']
+  name varchar(255) [note: 'User-defined pad name']
+  asset_id integer [note: 'Audio file reference']
+  graphic_asset_id integer [note: 'Pad image reference']
+  color varchar(20) [note: 'Pad LED color (hex)']
+  image text [note: 'Pad background image URL (legacy support)']
+  synth_settings json [note: 'Tone.js synthesizer parameters (when type=synth)']
+  effects json [note: 'Pad-specific effect chain settings (array)']
+  choke_group varchar(10) [note: 'Choke group (1, 2, 3, 4)']
+  instrument_preset varchar(50) [note: 'Virtual instrument preset key (e.g., grand_piano, rhodes)']
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+  updated_at datetime [default: `CURRENT_TIMESTAMP`]
+  
+  Note: 'Mapping between pads and audio/graphic assets'
+}
+
+Table Assets {
+  id integer [pk, increment]
+  user_id integer [note: 'Uploader (NULL for anonymous)']
+  original_name varchar(255) [not null, note: 'Original filename']
+  filename varchar(255) [not null, note: 'Stored filename']
+  file_path varchar(500) [not null, note: 'URL (S3) or local path']
+  mimetype varchar(100) [note: 'MIME type']
+  is_recorded boolean [default: false, note: 'TRUE: recorded file, FALSE: uploaded file']
+  category varchar(20) [default: 'sample', note: 'sample, synth, instrument, or background']
+  is_public boolean [default: false, note: 'Public visibility']
+  storage_type varchar(10) [default: 'local', note: 'local or s3']
+  s3_key varchar(500) [note: 'S3 object key (when storageType=s3)']
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+  updated_at datetime [default: `CURRENT_TIMESTAMP`]
+  
+  Note: 'Audio file metadata (MP3, WAV, OGG, etc.)'
+}
+
+Table GraphicAssets {
+  id integer [pk, increment]
+  user_id integer [note: 'Uploader (NULL for anonymous)']
+  original_name varchar(255) [not null, note: 'Original filename']
+  filename varchar(255) [not null, note: 'Stored filename']
+  file_path varchar(500) [not null, note: 'Local path or S3 URL']
+  mimetype varchar(100) [note: 'MIME type (image/jpeg, image/png, image/gif, etc.)']
+  category varchar(20) [default: 'background', note: 'background, pad, icon, texture, overlay, or other']
+  width integer [note: 'Image width in pixels']
+  height integer [note: 'Image height in pixels']
+  file_size integer [note: 'File size in bytes']
+  is_public boolean [default: false, note: 'Public visibility']
+  storage_type varchar(10) [default: 'local', note: 'local or s3']
+  s3_key varchar(500) [note: 'S3 object key (when storageType=s3)']
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+  updated_at datetime [default: `CURRENT_TIMESTAMP`]
+  
+  Note: 'Image file metadata (JPEG, PNG, GIF, etc.) for backgrounds and pad images'
+}
+
+Table Posts {
+  id integer [pk, increment]
+  user_id integer [note: 'Author']
+  preset_id integer [note: 'Linked preset (nullable - snapshot supported)']
+  title varchar(255) [not null, note: 'Post title']
+  description text [note: 'Project description or usage instructions']
+  like_count integer [default: 0, note: 'Like count (for popularity sorting)']
+  download_count integer [default: 0, note: 'Download count']
+  view_count integer [default: 0, note: 'View count']
+  tags json [note: 'Array of strings (e.g., ["HipHop", "Trap"])']
+  genre varchar(50) [note: 'Music genre']
+  is_published boolean [default: true, note: 'Published status']
+  preset_data json [note: 'Preset data snapshot (in case original preset is deleted)']
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+  updated_at datetime [default: `CURRENT_TIMESTAMP`]
+  
+  Note: 'Community posts for sharing presets'
+}
+
+Table Comments {
+  id integer [pk, increment]
+  post_id integer [note: 'Belongs to post']
+  user_id integer [note: 'Comment author']
+  content text [not null, note: 'Comment content']
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+  updated_at datetime [default: `CURRENT_TIMESTAMP`]
+  
+  Note: 'Comments on community posts'
+}
+
+Table UserPreferences {
+  id integer [pk, increment]
+  user_id integer [unique, note: 'One preference per user']
+  latency_ms integer [default: 100, note: 'Audio output latency in milliseconds']
+  visualizer_mode varchar(50) [note: 'Visualizer design type (e.g., waveform, spectrum, bars)']
+  default_master_volume float [default: 0.7, note: 'Default master volume on app start (0.0 ~ 1.0)']
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+  updated_at datetime [default: `CURRENT_TIMESTAMP`]
+  
+  Note: 'User-specific application preferences'
+}
+
+Table PresetAccesses {
+  id integer [pk, increment]
+  user_id integer [note: 'User who loaded preset (NULL for anonymous)']
+  preset_id integer [note: 'Loaded preset ID']
+  session_id varchar(255) [note: 'Session ID for anonymous users']
+  loaded_at datetime [not null, default: `CURRENT_TIMESTAMP`, note: 'When preset was loaded']
+  
+  Note: 'Tracks which presets users have loaded (for asset filtering)'
+}
+
+Table Tracks {
+  id integer [pk, increment, note: 'Primary key']
+  user_id integer [note: 'Uploader (NULL for anonymous)']
+  title varchar(255) [note: 'Track title']
+  artist varchar(255) [note: 'Artist name']
+  original_file_path varchar(500) [not null, note: 'Original audio file path']
+  bpm float [note: 'Beats per minute']
+  key varchar(20) [note: 'Musical key (e.g., A Minor)']
+  camelot varchar(10) [note: 'Camelot Wheel code (e.g., 8A)']
+  beats json [note: 'Beat timestamps array']
+  downbeats json [note: 'Downbeat timestamps array']
+  segments json [note: 'Structure segments (intro, verse, chorus, outro)']
+  duration float [note: 'Track duration in seconds']
+  file_size integer [note: 'File size in bytes']
+  mimetype varchar(100) [note: 'MIME type']
+  storage_type varchar(10) [default: 'local', note: 'local or s3']
+  s3_key varchar(500) [note: 'S3 object key (when storageType=s3)']
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+  updated_at datetime [default: `CURRENT_TIMESTAMP`]
+  
+  Note: 'Uploaded audio tracks with analysis metadata'
+}
+
+Table Stems {
+  id integer [pk, increment, note: 'Primary key']
+  track_id integer [not null, note: 'Belongs to track']
+  type varchar(20) [not null, note: 'Stem type: drums, bass, vocals, other']
+  file_path varchar(500) [not null, note: 'Stem file path']
+  file_size integer [note: 'File size in bytes']
+  storage_type varchar(10) [default: 'local', note: 'local or s3']
+  s3_key varchar(500) [note: 'S3 object key (when storageType=s3)']
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+  
+  Note: 'Separated stem files from Demucs AI model'
+}
+
+Table Transitions {
+  id integer [pk, increment, note: 'Primary key']
+  user_id integer [note: 'Creator (NULL for anonymous)']
+  track_a_id integer [not null, note: 'First track ID']
+  track_b_id integer [not null, note: 'Second track ID']
+  swap_point float [not null, note: 'Transition start point in seconds']
+  output_file_path varchar(500) [not null, note: 'Output transition file path']
+  duration float [note: 'Transition duration in seconds']
+  file_size integer [note: 'File size in bytes']
+  storage_type varchar(10) [default: 'local', note: 'local or s3']
+  s3_key varchar(500) [note: 'S3 object key (when storageType=s3)']
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+  
+  Note: 'Generated transitions between two tracks'
+}
+
+// Relationships
+Ref: Presets.user_id > Users.id [delete: cascade]
+Ref: Presets.parent_preset_id > Presets.id [delete: set null]
+Ref: KeyMappings.preset_id > Presets.id [delete: cascade]
+Ref: KeyMappings.asset_id > Assets.id [delete: set null]
+Ref: KeyMappings.graphic_asset_id > GraphicAssets.id [delete: set null]
+Ref: Assets.user_id > Users.id [delete: set null]
+Ref: GraphicAssets.user_id > Users.id [delete: cascade]
+Ref: Posts.user_id > Users.id [delete: cascade]
+Ref: Posts.preset_id > Presets.id [delete: set null]
+Ref: Comments.post_id > Posts.id [delete: cascade]
+Ref: Comments.user_id > Users.id [delete: cascade]
+Ref: UserPreferences.user_id > Users.id [delete: cascade]
+Ref: PresetAccesses.user_id > Users.id [delete: cascade]
+Ref: PresetAccesses.preset_id > Presets.id [delete: cascade]
+Ref: Tracks.user_id > Users.id [delete: set null]
+Ref: Stems.track_id > Tracks.id [delete: cascade]
+Ref: Transitions.user_id > Users.id [delete: set null]
+Ref: Transitions.track_a_id > Tracks.id [delete: cascade]
+Ref: Transitions.track_b_id > Tracks.id [delete: cascade]
