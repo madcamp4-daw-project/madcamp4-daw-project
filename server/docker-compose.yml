@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  web-daw:
+    build: .
+    container_name: web_daw_container
+    ports:
+      - "3001:3001"  # 호스트포트:컨테이너포트
+    volumes:
+      # 로컬의 uploads와 output 폴더를 컨테이너와 동기화 (결과물 확인용)
+      - ./uploads:/app/uploads
+      - ./output:/app/output
+    environment:
+      - NODE_ENV=production
+    restart: always
