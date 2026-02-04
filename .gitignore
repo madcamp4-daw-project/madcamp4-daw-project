@@ -16,6 +16,8 @@ server/uploads/
 
 client/.next
 
+client/.next
+
 server/venv
 server/output
 server/services/ffmpeg.exe
