@@ -1,0 +1,32 @@
+# Transition DJ Backend 의존성
+# Python 3.10+ 필요
+
+# ===== Core Framework =====
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# ===== Audio Processing =====
+# Stem Separation
+demucs>=4.0.0
+torch>=2.0.0
+
+# Beat/BPM Analysis
+madmom>=0.16.1
+
+# Audio I/O & Analysis
+librosa>=0.10.1
+numpy>=1.24.0
+soundfile>=0.12.1
+scipy>=1.11.0
+
+# Time Stretching
+pyrubberband>=0.3.0
+
+# ===== Utilities =====
+pydantic>=2.5.0
+httpx>=0.26.0
+
+# ===== Optional (ML/GPU) =====
+# torch-audio>=2.0.0  # GPU 가속용
+# onnxruntime-gpu>=1.16.0  # ONNX 모델 실행
