@@ -15,6 +15,12 @@ app.use(cors()); // 프론트엔드와 통신을 위해 필수
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// 로깅 미들웨어 (라우트보다 먼저 정의해야 함)
+app.use((req, res, next) => {
+    console.log(`[요청옴] ${req.method} ${req.url}`);
+    next();
+});
+
 // 정적 파일 제공 (업로드된 파일이나 결과물 접근용)
 // 예: http://localhost:3001/uploads/tracks/파일이름.wav
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -22,11 +28,6 @@ app.use('/output', express.static(path.join(__dirname, 'output')));
 
 // 라우트 등록
 app.use('/api/sound', audioRouter);
-
-app.use((req, res, next) => {
-    console.log(`[요청옴] ${req.method} ${req.url}`);
-    next();
-});
 
 // 서버 시작
 app.listen(PORT, () => {

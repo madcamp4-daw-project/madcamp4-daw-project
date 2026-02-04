@@ -16,34 +16,29 @@ export type { ApiSource } from './config';
 
 // Stem Separation API
 export {
-  uploadForSeparation,
+  uploadAudioFile as uploadStemFile, // Alias
+  requestStemSeparation,
   checkSeparationStatus,
-  downloadStem,
-  downloadAllStems,
-  cancelSeparation,
-} from './stemSeparation';
+  uploadAndExtract,
+  getStemDownloadUrl,
+} from './stemSeparationClient';
+// Stem Separation API Types
 export type {
   StemExtractionOptions,
   StemJobStatus,
-  StemExtractionResponse,
-} from './stemSeparation';
+} from './stemSeparationClient';
 
 // Transition DJ API
 export {
-  uploadAudioFile,
-  analyzeBeats,
-  requestStemSeparation,
-  getStemStatus,
+  uploadAudioFile as uploadTransitionFile, // Alias
   createTransitionMix,
   getStreamUrl,
 } from './transition';
+
+// Transition DJ API Types
 export type {
   BeatAnalysis,
   Section,
-  StemResult,
-  StemVisualsData,
-  StemNote,
-  DrumHit,
   MixResult,
 } from './transition';
 

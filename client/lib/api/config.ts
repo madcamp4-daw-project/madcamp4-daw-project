@@ -16,14 +16,9 @@ export const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== 'false';
  */
 export const API_CONFIG = {
   /**
-   * Stem Separation API (Demucs)
+   * 통합 Sound API Base URL
    */
-  stems: process.env.NEXT_PUBLIC_STEM_API_URL || '/api/stems',
-  
-  /**
-   * Transition DJ API (BeatNet, Madmom)
-   */
-  transition: process.env.NEXT_PUBLIC_TRANSITION_API_URL || '/api/transition',
+  base: process.env.NEXT_PUBLIC_API_BASE_URL || '/api/sound',
   
   /**
    * SoundCloud API
@@ -79,8 +74,8 @@ export async function checkBackendHealth(): Promise<{
     return {
       available: true,
       services: {
-        stems: data.demucs === 'ok',
-        transition: data.beatnet === 'ok' || data.madmom === 'ok',
+        stems: true, // Assuming true if health check passes as we don't have separate service checks yet
+        transition: true,
         soundcloud: true, // SoundCloud는 별도 체크
       },
       latency,

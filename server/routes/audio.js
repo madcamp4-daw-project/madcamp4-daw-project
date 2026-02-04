@@ -46,18 +46,52 @@ const jobQueue = new Map();
  */
 const runPythonScript = (scriptName, args, jobId = null) => {
     return new Promise((resolve, reject) => {
-        const scriptPath = path.join(__dirname, '../services', scriptName);
+        // 1. 루트 경로 (main.py, audio_analysis.py 등) 확인
+        let scriptPath = path.join(__dirname, '../', scriptName);
+        
+        // 2. 없으면 services 폴더 확인
+        if (!fs.existsSync(scriptPath)) {
+            scriptPath = path.join(__dirname, '../services', scriptName);
+        }
+
         const pythonProcess = spawn('python', [scriptPath, ...args]);
 
         let resultString = '';
         let errorString = '';
 
-        // stdout 수집
+        // stdout 수집 (실시간 진행률 파싱)
         pythonProcess.stdout.on('data', (data) => {
             const str = data.toString();
             resultString += str;
-            // Job이 있다면 진행상황 로깅 가능 (여기선 생략)
-            if (jobId) console.log(`[Job ${jobId}] stdout: ${str.trim()}`);
+            
+            // 실시간 로그에서 JSON 파싱 시도 (줄바꿈 기준)
+            const lines = str.split('\n');
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                
+                try {
+                    const jsonMsg = JSON.parse(trimmed);
+                    // 1. 진행률 및 메시지 업데이트
+                    if (jsonMsg.progress !== undefined && jobId) {
+                        const numericProgress = Number(jsonMsg.progress);
+                        if (!isNaN(numericProgress)) {
+                             // JobQueue 업데이트
+                             const currentJob = jobQueue.get(jobId);
+                             if (currentJob) {
+                                 currentJob.progress = numericProgress;
+                                 if (jsonMsg.message) {
+                                     currentJob.message = jsonMsg.message;
+                                 }
+                                 jobQueue.set(jobId, currentJob);
+                                 console.log(`[Job ${jobId}] Progress: ${numericProgress}% - ${jsonMsg.message || ''}`);
+                             }
+                        }
+                    }
+                } catch (e) {
+                    // JSON이 아니면 무시 (일반 로그일 수 있음)
+                }
+            }
         });
 
         // stderr 수집 (Python 로그)
@@ -71,21 +105,49 @@ const runPythonScript = (scriptName, args, jobId = null) => {
             if (code !== 0) {
                 return reject(new Error(errorString || 'Python script failed'));
             }
-            try {
-                // JSON 부분만 파싱 시도 (로그가 섞여 있을 수 있으므로)
-                // 보통 마지막 줄이나 전체 출력 중 JSON을 찾음
-                // 여기서는 간단하게 전체를 파싱 시도
-                const result = JSON.parse(resultString);
-                resolve(result);
-            } catch (e) {
-                // 출력이 JSON이 아닐 경우 (단순 성공 메시지 등)
-                // 에러가 없으면 성공으로 간주하고 raw string 반환
-                if (resultString.trim()) {
-                    resolve({ raw: resultString.trim() });
-                } else {
-                    reject(new Error(`Failed to parse output: ${resultString}`));
+                // 에러가 없으면 성공으로 간주
+                // resultString에는 진행률 로그({"progress":...})들이 섞여 있음
+                // 줄바꿈으로 나누고, 마지막으로 유효한 JSON을 찾거나, 'stems' 키가 있는 줄을 찾음
+                const lines = resultString.split('\n').map(l => l.trim()).filter(l => l);
+                let finalResult = null;
+                
+                // 뒤에서부터 검색하여 결과 JSON 찾기 (가장 마지막에 출력된 유효한 결과)
+                for (let i = lines.length - 1; i >= 0; i--) {
+                    try {
+                        const parsed = JSON.parse(lines[i]);
+                        
+                        // 1순위: stems 데이터(분리) 또는 bpm 데이터(분석)가 있는 경우 (확실한 성공 결과)
+                        if (parsed.stems || parsed.bpm) {
+                            finalResult = parsed;
+                            break;
+                        }
+                        
+                        // 2순위: 메시지가 있고, progress가 없거나(완료메시지), 
+                        // 그러나 진행률 로그(progress 있는거)는 결과로 취급하면 안됨!
+                        // 단, progress: 100 이면서 stems가 없는건 그냥 진행 로그일 뿐임.
+                        // 따라서 stems가 없는 progress 포함 메시지는 건너뜀.
+                    } catch (e) {}
                 }
-            }
+
+                if (finalResult) {
+                    resolve(finalResult);
+                } else {
+                    // stems를 못 찾았으면, 혹시 에러 메시지가 있는지 확인
+                    const errorLog = lines.find(l => l.includes('"error"'));
+                    if (errorLog) {
+                         try { 
+                             resolve(JSON.parse(errorLog)); 
+                             return;
+                         } catch {}
+                    }
+                    
+                    // 그래도 없으면 실패로 간주하거나 raw 반환
+                    // 하지만 stems가 없으면 프론트에서 아무것도 안뜸.
+                    // 디버깅을 위해 로깅
+                    console.error('❌ 결과 파싱 실패: 유효한 결과(stems 또는 bpm)를 찾을 수 없음', lines);
+                    reject(new Error('결과에서 유효한 데이터(stems/bpm)를 찾을 수 없습니다.'));
+                }
+
         });
     });
 };
@@ -155,6 +217,17 @@ router.post('/split', (req, res) => {
     // stem_separation.py는 이제 파일명만 받으면 알아서 경로를 찾도록 수정되었음
     runPythonScript('stem_separation.py', [targetFilename], jobId)
         .then(result => {
+             // Python 스크립트가 명시적으로 error 필드를 반환했을 경우 실패 처리
+             if (result.error) {
+                 console.error(`❌ 분리 실패 (Job: ${jobId}):`, result.error);
+                 jobQueue.set(jobId, { 
+                     status: 'failed', 
+                     error: result.error,
+                     failedAt: Date.now()
+                 });
+                 return;
+             }
+
             console.log(`✅ 분리 완료 (Job: ${jobId})`);
             jobQueue.set(jobId, { 
                 status: 'completed', 

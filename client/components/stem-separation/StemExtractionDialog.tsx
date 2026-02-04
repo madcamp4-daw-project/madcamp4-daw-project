@@ -22,9 +22,9 @@ import { Progress } from "@/components/ui/progress";
 import { Loader2 } from "lucide-react";
 import type { StemExtractionOptions, StemJobStatus } from "@/lib/api/stemSeparation";
 import {
-  uploadForSeparation,
+  uploadAndExtract,
   checkSeparationStatus,
-} from "@/lib/api/stemSeparation";
+} from "@/lib/api/stemSeparationClient";
 
 /**
  * FL Studio 스타일 Stem 추출 다이얼로그 Props
@@ -32,7 +32,7 @@ import {
 interface StemExtractionDialogProps {
   isOpen: boolean;                    // 다이얼로그 열림 상태
   onClose: () => void;                // 닫기 콜백
-  onExtract: (stems: StemJobStatus['stems']) => void; // 추출 완료 콜백
+  onExtract: (stems: NonNullable<NonNullable<StemJobStatus['result']>['stems']>) => void; // 추출 완료 콜백
   fileName?: string;                  // 원본 파일명
   audioFile?: File;                   // 추출할 오디오 파일
 }
@@ -86,44 +86,66 @@ export function StemExtractionDialog({
 
     setIsProcessing(true);
     setProgress(0);
-    setStatusMessage("업로드 중...");
+    setStatusMessage("업로드 및 분리 요청 중...");
 
     try {
-      // Real API 호출
       const file = audioFile || new File([""], "test.wav");
-      const response = await uploadForSeparation(file, {
+      
+      // 1. Upload + Split Request (2-Step)
+      const { jobId } = await uploadAndExtract(file, {
         stems,
         limitCpu,
         afterAction,
       });
 
-      setStatusMessage("처리 중...");
+      setStatusMessage("처리 중... (대기열 진입)");
 
-      // 진행 상태 폴링
-      let currentProgress = 0;
-      while (currentProgress < 100) {
-        const status = await checkSeparationStatus(response.jobId, currentProgress);
-        currentProgress = status.progress;
-        setProgress(status.progress);
-        setStatusMessage(status.message || `처리 중... ${status.progress}%`);
-
-        if (status.status === "completed" && status.stems) {
-          setStatusMessage("완료!");
-          onExtract(status.stems);
-          setTimeout(() => {
-            setIsProcessing(false);
-            onClose();
-          }, 500);
-          return;
+      // 2. Polling Status
+      let isDone = false;
+      while (!isDone) {
+        // 1초 대기
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const status = await checkSeparationStatus(jobId);
+        
+        // Progress 업데이트 (서버가 제공하면 사용, 아니면 가짜 증가)
+        if (typeof status.progress === 'number') {
+            setProgress(status.progress);
+        } else {
+             // Fake progress only if processing
+             if (status.status === 'processing') {
+                 setProgress(prev => Math.min(prev + 5, 90));
+             }
         }
-
-        if (status.status === "failed") {
-          throw new Error(status.error || "처리 실패");
+        
+        if (status.status === 'completed') {
+             setStatusMessage("완료!");
+             setProgress(100);
+             isDone = true;
+             
+             // 결과 전달
+             // Server might return full URLs in result.stems
+             if (status.result && status.result.stems) {
+                 onExtract(status.result.stems);
+             }
+             
+             setTimeout(() => {
+                setIsProcessing(false);
+                onClose();
+             }, 500);
+             return;
         }
+        
+        if (status.status === 'failed') {
+            throw new Error(status.error || status.message || "처리 실패");
+        }
+        
+        setStatusMessage(status.message || `처리 중... ${status.status}`);
       }
-    } catch (error) {
+
+    } catch (error: any) {
       console.error("Stem extraction failed:", error);
-      setStatusMessage("오류가 발생했습니다.");
+      setStatusMessage(`오류: ${error.message}`);
       setIsProcessing(false);
     }
   }, [stems, limitCpu, afterAction, audioFile, onExtract, onClose]);

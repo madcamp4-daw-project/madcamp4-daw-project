@@ -185,23 +185,44 @@ export function TransitionPanel() {
    */
   const handleFileLoad = useCallback(async (side: 'A' | 'B', file: File) => {
     const setter = side === 'A' ? setDeckA : setDeckB;
+    const fileIdSetter = side === 'A' ? setFileIdA : setFileIdB;
     
-    // Mock 분석 (실제 구현시 API 호출)
-    const mockBpm = 80 + Math.random() * 60; // 80-140 BPM
-    const mockDuration = 180 + Math.random() * 120; // 3-5분
-    
+    // Set loading state (optional, or just partial state)
     setter(prev => ({
       ...prev,
       file,
-      trackName: file.name.replace(/\.[^/.]+$/, ""),
+      trackName: file.name.replace(/\.[^/.]+$/, "") + " (Uploading...)",
       artistName: "Unknown Artist",
-      bpm: Math.round(mockBpm * 10) / 10,
-      originalBpm: Math.round(mockBpm * 10) / 10,
-      duration: mockDuration,
-      currentTime: 0,
       isPlaying: false,
-      pitchPercent: 0,
     }));
+
+    try {
+        const response = await uploadAudioFile(file);
+        if (response.success) {
+            fileIdSetter(response.trackId);
+            
+            // Server might return analysis (bpm, duration, etc.)
+            // If not, we might need a separate analyze call or defaults
+            const analysis = response.analysis;
+            
+            setter(prev => ({
+                ...prev,
+                trackName: response.originalName || file.name.replace(/\.[^/.]+$/, ""),
+                bpm: analysis?.bpm ? Math.round(analysis.bpm * 10) / 10 : 120, // Default 120
+                originalBpm: analysis?.bpm ? Math.round(analysis.bpm * 10) / 10 : 120,
+                duration: analysis?.duration || 180, // Default 3 mins if unknown
+                beatGrid: analysis?.beats || [], // if `DeckState` has beatGrid
+            }));
+            console.log(`Deck ${side} loaded: ${response.trackId}`);
+        } else {
+             setter(prev => ({ ...prev, trackName: prev.trackName?.replace(" (Uploading...)", " (Error)") }));
+             alert(`Upload failed: ${response.message}`);
+        }
+    } catch (e: any) {
+        console.error("File load error:", e);
+        setter(prev => ({ ...prev, trackName: prev.trackName?.replace(" (Uploading...)", " (Error)") }));
+        alert(`Upload error: ${e.message}`);
+    }
   }, []);
 
   /**
@@ -267,18 +288,32 @@ export function TransitionPanel() {
       // fileId가 있으면 실제 API 호출
       if (fileIdA && fileIdB) {
         console.log('[Magic Mix] 실제 API 호출 중...');
+        // New Signature: sourceId, targetId, options
         const result = await createTransitionMix(
-          { fileId: fileIdA, startTime: deckA.currentTime, endTime: deckA.duration },
-          { fileId: fileIdB, startTime: 0, endTime: deckB.duration },
-          { transitionType: 'blend', transitionDuration: 8, syncBpm: beatLock, targetBpm: deckA.bpm }
+          fileIdA,
+          fileIdB,
+          { 
+              transitionType: 'blend', 
+              bridgeBars: 4 
+              // syncBpm, transitionDuration options depend on server support. 
+              // For now we pass what server 'blend' endpoint supports.
+          }
         );
         
         console.log('[Magic Mix] API 응답:', result);
         
         // 결과 오디오 재생
-        if (result.streamUrl && mixAudioRef.current) {
-          mixAudioRef.current.src = result.streamUrl;
+        if (result.success && result.result?.mixUrl && mixAudioRef.current) {
+          // mixUrl handling:
+          // The server likely returns a relative path or a filename. 
+          // Use getStreamUrl if it helps or if createTransitionMix return type handles it.
+          // result.result.mixUrl might be filename.
+          const url = getStreamUrl(result.result.mixUrl);
+          
+          mixAudioRef.current.src = url;
           mixAudioRef.current.play().catch(e => console.warn('믹스 오디오 재생 실패:', e));
+        } else if (result.success === false) {
+             throw new Error(result.message);
         }
         
         setIsMixProcessing(false);

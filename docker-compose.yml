@@ -29,6 +29,8 @@ services:
     ports:
       - "8000:3001" # Map Host 8000 to Container 3001 (NodeJS Server)
     volumes:
+      - ./server:/app
+      - /app/node_modules
       - ./server/uploads:/app/uploads
       - ./server/output:/app/output
     environment:

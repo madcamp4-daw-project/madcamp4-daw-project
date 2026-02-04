@@ -6,7 +6,8 @@ import { Play, Pause, Download, Plus, Layers } from "lucide-react";
 import { StemDropZone } from "./StemDropZone";
 import { StemTrack } from "./StemTrack";
 import { StemExtractionDialog } from "./StemExtractionDialog";
-import type { StemJobStatus } from "@/lib/api/stemSeparation";
+import type { StemJobStatus } from "@/lib/api/stemSeparationClient";
+import { getStemDownloadUrl } from "@/lib/api/stemSeparationClient";
 
 /**
  * 개별 스템 트랙 데이터
@@ -90,7 +91,7 @@ export function StemSeparationPanel() {
    * 스템 추출 완료 핸들러
    */
   const handleExtractComplete = useCallback(
-    (extractedStems: StemJobStatus["stems"]) => {
+    (extractedStems: NonNullable<NonNullable<StemJobStatus["result"]>["stems"]>) => {
       if (!extractedStems || !originalFile) return;
 
       const newStems: StemData[] = [];
@@ -101,7 +102,7 @@ export function StemSeparationPanel() {
           id: "drums",
           name: `${baseName}_Drums`,
           color: stemColors.drums,
-          audioUrl: extractedStems.drums,
+          audioUrl: getStemDownloadUrl(extractedStems.drums),
           volume: 1,
           isSolo: false,
           isMuted: false,
@@ -114,7 +115,7 @@ export function StemSeparationPanel() {
           id: "bass",
           name: `${baseName}_Bass`,
           color: stemColors.bass,
-          audioUrl: extractedStems.bass,
+          audioUrl: getStemDownloadUrl(extractedStems.bass),
           volume: 1,
           isSolo: false,
           isMuted: false,
@@ -127,7 +128,7 @@ export function StemSeparationPanel() {
           id: "instruments",
           name: `${baseName}_Instruments`,
           color: stemColors.instruments,
-          audioUrl: extractedStems.instruments,
+          audioUrl: getStemDownloadUrl(extractedStems.instruments),
           volume: 1,
           isSolo: false,
           isMuted: false,
@@ -140,7 +141,7 @@ export function StemSeparationPanel() {
           id: "vocals",
           name: `${baseName}_Vocals`,
           color: stemColors.vocals,
-          audioUrl: extractedStems.vocals,
+          audioUrl: getStemDownloadUrl(extractedStems.vocals),
           volume: 1,
           isSolo: false,
           isMuted: false,
