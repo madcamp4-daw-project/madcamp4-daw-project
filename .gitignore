@@ -13,3 +13,5 @@ server/.env
 
 # Server Uploads
 server/uploads/
+
+client/.next
