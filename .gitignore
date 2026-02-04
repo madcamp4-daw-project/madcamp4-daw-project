@@ -1,29 +1,48 @@
-node_modules
-.env
+# General
 .DS_Store
-dist
-coverage
-.gemini
-/client/node_modules
-/server/node_modules
-/client/dist
-
-# Server Config
-server/.env
-
-# Server Uploads
-server/uploads/
-
-client/.next
-
-client/.next
-
-server/venv
-server/output
-server/services/ffmpeg.exe
-server/services/ffprobe.exe
-
-client/.next/
-
+*.pem
+*.log
 *.pyc
 *.wav
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example
+
+# IDE / Editor
+.vscode
+.idea
+.gemini
+
+# Client (Next.js)
+client/node_modules
+client/.next
+client/out
+client/build
+client/.pnp
+client/.pnp.*
+client/.yarn/*
+!client/.yarn/patches
+!client/.yarn/plugins
+!client/.yarn/releases
+!client/.yarn/versions
+client/.vercel
+client/*.tsbuildinfo
+client/next-env.d.ts
+client/npm-debug.log*
+client/yarn-debug.log*
+client/yarn-error.log*
+client/.pnpm-debug.log*
+
+# Server (Python)
+server/node_modules
+server/venv
+server/.venv
+server/env
+server/uploads/
+server/output/
+server/services/ffmpeg.exe
+server/services/ffprobe.exe
+server/__pycache__/

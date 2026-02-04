@@ -6,9 +6,6 @@
 // API 기본 URL (백엔드 연동 시 환경 변수로 설정)
 const API_BASE_URL = process.env.NEXT_PUBLIC_STEM_API_URL || '/api/stems';
 
-// 환경 변수로 Mock 모드 결정 (백엔드 미연결 시 true)
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
-
 /**
  * 스템 추출 옵션 인터페이스
  */
@@ -58,12 +55,6 @@ export async function uploadForSeparation(
   file: File,
   options: StemExtractionOptions
 ): Promise<StemExtractionResponse> {
-  // Mock 모드일 경우 Mock 응답 반환
-  if (USE_MOCK) {
-    console.log('[Stem API] Mock 모드 사용 중');
-    return mockUploadForSeparation(file, options);
-  }
-
   const formData = new FormData();
   formData.append('file', file);
   
@@ -96,11 +87,6 @@ export async function uploadForSeparation(
  * @returns 작업 상태 및 진행률
  */
 export async function checkSeparationStatus(jobId: string, currentProgress: number = 0): Promise<StemJobStatus> {
-  // Mock 모드일 경우 Mock 응답 반환
-  if (USE_MOCK) {
-    return mockCheckStatus(jobId, currentProgress);
-  }
-
   const response = await fetch(`${API_BASE_URL}/status/${jobId}`);
   
   if (!response.ok) {
@@ -156,54 +142,4 @@ export async function cancelSeparation(jobId: string): Promise<void> {
   if (!response.ok) {
     throw new Error(`Failed to cancel job: ${response.statusText}`);
   }
-}
-
-/**
- * Mock 함수: 백엔드 없이 테스트용
- * 실제 분리 대신 시뮬레이션된 응답 반환
- */
-export function mockUploadForSeparation(
-  file: File,
-  options: StemExtractionOptions
-): Promise<StemExtractionResponse> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        jobId: `mock-${Date.now()}`,
-        estimatedTime: 30,
-      });
-    }, 500);
-  });
-}
-
-/**
- * Mock 함수: 진행 상태 시뮬레이션
- */
-export function mockCheckStatus(
-  jobId: string,
-  currentProgress: number
-): Promise<StemJobStatus> {
-  return new Promise((resolve) => {
-    const newProgress = Math.min(currentProgress + 10, 100);
-    setTimeout(() => {
-      if (newProgress >= 100) {
-        resolve({
-          status: 'completed',
-          progress: 100,
-          stems: {
-            drums: `/mock-stems/${jobId}/drums.wav`,
-            bass: `/mock-stems/${jobId}/bass.wav`,
-            vocals: `/mock-stems/${jobId}/vocals.wav`,
-            instruments: `/mock-stems/${jobId}/instruments.wav`,
-          },
-        });
-      } else {
-        resolve({
-          status: 'processing',
-          progress: newProgress,
-          message: `Processing... ${newProgress}%`,
-        });
-      }
-    }, 500);
-  });
 }

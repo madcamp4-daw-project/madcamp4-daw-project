@@ -38,7 +38,7 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Upgrade pip and install build dependencies
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel Cython
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel Cython "numpy<2.0.0"
 
 # Copy Python requirements first (for Docker layer caching)
 COPY requirements.txt ./
@@ -54,7 +54,8 @@ RUN pip install --no-cache-dir \
 # [Step B] Install Requirements
 # 🔥 중요: requirements.txt에 이미 "numpy<2.0.0"이 명시되어 있으므로
 # 별도의 numpy 설치 라인을 제거하고 requirements.txt를 따릅니다.
-RUN pip install --no-cache-dir -r requirements.txt
+# --no-build-isolation: Pre-installed Cython/numpy refer
+RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt
 
 # ==============================================
 # 3. Node.js Dependencies

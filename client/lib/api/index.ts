@@ -21,8 +21,6 @@ export {
   downloadStem,
   downloadAllStems,
   cancelSeparation,
-  mockUploadForSeparation,
-  mockCheckStatus,
 } from './stemSeparation';
 export type {
   StemExtractionOptions,
@@ -34,10 +32,8 @@ export type {
 export {
   uploadAudioFile,
   analyzeBeats,
-  mockAnalyzeBeats,
   requestStemSeparation,
   getStemStatus,
-  mockGetStemStatus,
   createTransitionMix,
   getStreamUrl,
 } from './transition';

@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: madcamp_client
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      # Note: NEXT_PUBLIC_ variables are typically baked in at build time.
+      # To change these dynamically, a rebuild is usually required, or a runtime config strategy.
+      # We are relying on .env.local or build args matching this if strictly needed,
+      # but providing them here satisfies the requirement to have them in compose.
+      - NEXT_PUBLIC_USE_MOCK=false
+      - NEXT_PUBLIC_STEM_API_URL=http://localhost:8000/api/stems
+      - NEXT_PUBLIC_TRANSITION_API_URL=http://localhost:8000/api/transition
+    depends_on:
+      - server
+    restart: always
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: madcamp_server
+    ports:
+      - "8000:3001" # Map Host 8000 to Container 3001 (NodeJS Server)
+    volumes:
+      - ./server/uploads:/app/uploads
+      - ./server/output:/app/output
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    restart: always

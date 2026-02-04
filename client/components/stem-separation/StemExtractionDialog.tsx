@@ -22,8 +22,8 @@ import { Progress } from "@/components/ui/progress";
 import { Loader2 } from "lucide-react";
 import type { StemExtractionOptions, StemJobStatus } from "@/lib/api/stemSeparation";
 import {
-  mockUploadForSeparation,
-  mockCheckStatus,
+  uploadForSeparation,
+  checkSeparationStatus,
 } from "@/lib/api/stemSeparation";
 
 /**
@@ -89,9 +89,9 @@ export function StemExtractionDialog({
     setStatusMessage("업로드 중...");
 
     try {
-      // Mock API 호출 (백엔드 연동 시 실제 API로 교체)
+      // Real API 호출
       const file = audioFile || new File([""], "test.wav");
-      const response = await mockUploadForSeparation(file, {
+      const response = await uploadForSeparation(file, {
         stems,
         limitCpu,
         afterAction,
@@ -102,7 +102,7 @@ export function StemExtractionDialog({
       // 진행 상태 폴링
       let currentProgress = 0;
       while (currentProgress < 100) {
-        const status = await mockCheckStatus(response.jobId, currentProgress);
+        const status = await checkSeparationStatus(response.jobId, currentProgress);
         currentProgress = status.progress;
         setProgress(status.progress);
         setStatusMessage(status.message || `처리 중... ${status.progress}%`);

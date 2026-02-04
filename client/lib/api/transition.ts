@@ -6,9 +6,6 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_TRANSITION_API_URL || "/api/transition";
 
-// 환경 변수로 Mock 모드 결정 (백엔드 미연결 시 true)
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
-
 /**
  * 비트 분석 결과 인터페이스
  */
@@ -102,18 +99,6 @@ export async function uploadAudioFile(file: File): Promise<{
   sampleRate: number;
   channels: number;
 }> {
-  // Mock 모드일 경우 Mock 응답 반환
-  if (USE_MOCK) {
-    console.log('[Transition API] Mock 모드 사용 중 - uploadAudioFile');
-    return {
-      fileId: `file-${Date.now()}`,
-      filename: file.name,
-      duration: 180,
-      sampleRate: 44100,
-      channels: 2,
-    };
-  }
-
   const formData = new FormData();
   formData.append("file", file);
 
@@ -135,12 +120,6 @@ export async function uploadAudioFile(file: File): Promise<{
  * @returns 비트 분석 결과
  */
 export async function analyzeBeats(fileId: string): Promise<BeatAnalysis> {
-  // Mock 모드일 경우 Mock 응답 반환
-  if (USE_MOCK) {
-    console.log('[Transition API] Mock 모드 사용 중 - analyzeBeats');
-    return mockAnalyzeBeats();
-  }
-
   const response = await fetch(`${API_BASE}/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -155,46 +134,6 @@ export async function analyzeBeats(fileId: string): Promise<BeatAnalysis> {
 }
 
 /**
- * Mock 비트 분석 (백엔드 없을 때)
- */
-export async function mockAnalyzeBeats(file?: File): Promise<BeatAnalysis> {
-  await new Promise((resolve) => setTimeout(resolve, 500));
-
-  const bpm = 80 + Math.random() * 60; // 80-140 BPM
-  const duration = 180;
-  const beatInterval = 60 / bpm;
-  const beats: number[] = [];
-  const downbeats: number[] = [];
-
-  for (let t = 0; t < duration; t += beatInterval) {
-    beats.push(t);
-    if (beats.length % 4 === 1) {
-      downbeats.push(beats.length - 1);
-    }
-  }
-
-  return {
-    fileId: `mock-${Date.now()}`,
-    bpm: Math.round(bpm * 10) / 10,
-    timeSignature: "4/4",
-    beats,
-    downbeats,
-    sections: [
-      { name: "Intro", start: 0, end: 15 },
-      { name: "Verse", start: 15, end: 45 },
-      { name: "Chorus", start: 45, end: 75 },
-      { name: "Verse", start: 75, end: 105 },
-      { name: "Chorus", start: 105, end: 135 },
-      { name: "Outro", start: 135, end: 180 },
-    ],
-    waveformData: {
-      peaks: Array.from({ length: 2000 }, () => Math.random()),
-      duration,
-    },
-  };
-}
-
-/**
  * 스템 분리 요청
  * @param fileId 파일 ID
  * @param model 분리 모델 (htdemucs | htdemucs_ft)
@@ -204,15 +143,6 @@ export async function requestStemSeparation(
   fileId: string,
   model: "htdemucs" | "htdemucs_ft" = "htdemucs"
 ): Promise<{ jobId: string; estimatedTime: number }> {
-  // Mock 모드일 경우 Mock 응답 반환
-  if (USE_MOCK) {
-    console.log('[Transition API] Mock 모드 사용 중 - requestStemSeparation');
-    return {
-      jobId: `job-${Date.now()}`,
-      estimatedTime: 120,
-    };
-  }
-
   const response = await fetch(`${API_BASE}/stems`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -232,12 +162,6 @@ export async function requestStemSeparation(
  * @returns 스템 분리 결과
  */
 export async function getStemStatus(jobId: string): Promise<StemResult> {
-  // Mock 모드일 경우 Mock 응답 반환
-  if (USE_MOCK) {
-    console.log('[Transition API] Mock 모드 사용 중 - getStemStatus');
-    return mockGetStemStatus(jobId);
-  }
-
   const response = await fetch(`${API_BASE}/stems/${jobId}`);
 
   if (!response.ok) {
@@ -245,81 +169,6 @@ export async function getStemStatus(jobId: string): Promise<StemResult> {
   }
 
   return await response.json();
-}
-
-/**
- * Mock 스템 상태 (백엔드 없을 때)
- */
-let mockProgress = 0;
-export async function mockGetStemStatus(jobId: string): Promise<StemResult> {
-  await new Promise((resolve) => setTimeout(resolve, 300));
-
-  mockProgress += 20;
-  if (mockProgress > 100) mockProgress = 100;
-
-  if (mockProgress < 100) {
-    return {
-      jobId,
-      status: "processing",
-      progress: mockProgress,
-    };
-  }
-
-  return {
-    jobId,
-    status: "completed",
-    stems: {
-      vocals: { fileId: "vocals-1", streamUrl: "/api/transition/stream/vocals-1" },
-      bass: { fileId: "bass-1", streamUrl: "/api/transition/stream/bass-1" },
-      drums: { fileId: "drums-1", streamUrl: "/api/transition/stream/drums-1" },
-      other: { fileId: "other-1", streamUrl: "/api/transition/stream/other-1" },
-    },
-    stemVisuals: {
-      vocals: {
-        color: "#00FF00",
-        notes: Array.from({ length: 50 }, (_, i) => ({
-          time: i * 2,
-          pitch: 0.5 + Math.random() * 0.4,
-          volume: 0.6 + Math.random() * 0.4,
-          duration: 1 + Math.random(),
-        })),
-      },
-      bass: {
-        color: "#FF0000",
-        notes: Array.from({ length: 40 }, (_, i) => ({
-          time: i * 2.5,
-          pitch: 0.1 + Math.random() * 0.2,
-          volume: 0.7 + Math.random() * 0.3,
-          duration: 1 + Math.random() * 2,
-        })),
-      },
-      melody: {
-        color: "#FFA500",
-        notes: Array.from({ length: 80 }, (_, i) => ({
-          time: i * 1.2,
-          pitch: 0.3 + Math.random() * 0.4,
-          volume: 0.5 + Math.random() * 0.5,
-          duration: 0.5 + Math.random(),
-        })),
-      },
-      drums: {
-        kick: {
-          color: "#9B59B6",
-          hits: Array.from({ length: 180 }, (_, i) => ({
-            time: i * 0.5,
-            intensity: 0.6 + Math.random() * 0.4,
-          })),
-        },
-        snareHihat: {
-          color: "#3498DB",
-          hits: Array.from({ length: 360 }, (_, i) => ({
-            time: i * 0.25 + 0.25,
-            intensity: 0.3 + Math.random() * 0.7,
-          })),
-        },
-      },
-    },
-  };
 }
 
 /**
@@ -339,22 +188,6 @@ export async function createTransitionMix(
     targetBpm?: number;
   }
 ): Promise<MixResult> {
-  // Mock 모드일 경우 Mock 응답 반환
-  if (USE_MOCK) {
-    console.log('[Transition API] Mock 모드 사용 중 - createTransitionMix');
-    return {
-      mixId: `mix-${Date.now()}`,
-      streamUrl: "/api/transition/stream/mock-mix",
-      duration: (trackA.endTime - trackA.startTime) + (trackB.endTime - trackB.startTime),
-      transitionPoints: {
-        fadeOutStart: 0,
-        fadeOutEnd: options.transitionDuration,
-        fadeInStart: 0,
-        fadeInEnd: options.transitionDuration,
-      },
-    };
-  }
-
   const response = await fetch(`${API_BASE}/mix`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
