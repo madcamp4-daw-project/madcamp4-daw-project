@@ -19,5 +19,7 @@ server/output
 server/services/ffmpeg.exe
 server/services/ffprobe.exe
 
+client/.next/
+
 *.pyc
 *.wav
