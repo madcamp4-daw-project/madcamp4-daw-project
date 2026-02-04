@@ -37,3 +37,12 @@ services:
       - NODE_ENV=production
       - PORT=3001
     restart: always
+
+    # 🔥 GPU Support Added
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

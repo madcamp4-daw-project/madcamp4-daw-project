@@ -397,7 +397,7 @@ export default function DAWPage() {
             </div>
           )}
           {bottomPanel === "stems" && (
-            <div className="h-[500px] overflow-auto">
+            <div className="fixed top-[88px] left-0 right-0 bottom-0 z-50 bg-[#1a1a1a]">
               <StemSeparationPanel />
             </div>
           )}

@@ -2,535 +2,403 @@
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Download, Plus, Layers } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Play, Pause, Plus, Layers, Download, Volume2 } from "lucide-react";
 import { StemDropZone } from "./StemDropZone";
-import { StemTrack } from "./StemTrack";
 import { StemExtractionDialog } from "./StemExtractionDialog";
 import type { StemJobStatus } from "@/lib/api/stemSeparationClient";
 import { getStemDownloadUrl } from "@/lib/api/stemSeparationClient";
 
-/**
- * 개별 스템 트랙 데이터
- */
 interface StemData {
   id: string;
-  name: string;      // 예: "Drums", "Bass", "Vocals", "Instruments"
-  color: string;     // 트랙 색상
-  audioUrl?: string; // 오디오 URL
-  volume: number;    // 0-1
+  name: string;
+  color: string;
+  audioUrl?: string;
+  volume: number;
   isSolo: boolean;
   isMuted: boolean;
   isPlaying: boolean;
+  waveformData: number[];
 }
 
-/**
- * Stem Separation 메인 패널 컴포넌트
- * FL Studio 스타일의 4트랙 스템 분리 및 관리 UI
- */
-export function StemSeparationPanel() {
-  // 원본 파일 상태
-  const [originalFile, setOriginalFile] = useState<File | null>(null);
+const stemColors: Record<string, string> = {
+  drums: "#9B59B6",
+  bass: "#E74C3C",
+  vocals: "#2ECC71",
+  other: "#F39C12",
+};
 
-  // 원본 오디오 URL 상태 (A/B 테스트용)
-  const [originalAudioUrl, setOriginalAudioUrl] = useState<string | null>(null);
+// Simple waveform component using canvas
+function WaveformCanvas({ audioUrl, color, isMuted }: { audioUrl?: string; color: string; isMuted: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [waveformData, setWaveformData] = useState<number[]>([]);
 
-  // 다이얼로그 상태
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  useEffect(() => {
+    if (!audioUrl) return;
 
-  // 분리된 스템 상태
-  const [stems, setStems] = useState<StemData[]>([]);
-
-  // 전체 재생 상태
-  const [isPlayingAll, setIsPlayingAll] = useState(false);
-
-  // A/B 비교 상태 (원본 vs 분리)
-  const [isABMode, setIsABMode] = useState(false);
-  const [showOriginal, setShowOriginal] = useState(true);
-
-  // 오디오 컨텍스트 참조
-  const audioContextRef = useRef<AudioContext | null>(null);
-
-  // 원본 오디오 요소 참조 (A/B 테스트용)
-  const originalAudioRef = useRef<HTMLAudioElement | null>(null);
-
-  // 스템 오디오 요소들 참조
-  const stemsAudioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
-
-  /**
-   * 스템 색상 정의 (FL Studio / Transitions DJ 스타일)
-   * - Drums: Purple (#9B59B6) - 킥, 스네어, 하이햇 등 드럼 사운드
-   * - Bass: Red (#E74C3C) - 베이스 라인, 저음역대
-   * - Instruments: Orange (#F39C12) - 기타, 피아노, 신스 등 멜로디 악기
-   * - Vocals: Green (#2ECC71) - 보컬, 목소리
-   */
-  const stemColors: Record<string, string> = {
-    drums: "#9B59B6",       // 보라 (Purple) - Drums
-    bass: "#E74C3C",        // 빨강 (Red) - Bass
-    vocals: "#2ECC71",      // 녹색 (Green) - Vocals
-    instruments: "#F39C12", // 주황 (Orange) - Instruments
-  };
-
-  /**
-   * 파일 선택 핸들러
-   * 원본 오디오 URL 생성하여 A/B 테스트 준비
-   */
-  const handleFileSelect = useCallback((file: File) => {
-    // 기존 원본 URL 해제
-    if (originalAudioUrl) {
-      URL.revokeObjectURL(originalAudioUrl);
-    }
+    const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
     
-    // 새 원본 오디오 URL 생성
-    const url = URL.createObjectURL(file);
-    setOriginalAudioUrl(url);
+    fetch(audioUrl)
+      .then(response => response.arrayBuffer())
+      .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
+      .then(audioBuffer => {
+        const rawData = audioBuffer.getChannelData(0);
+        const samples = 200;
+        const blockSize = Math.floor(rawData.length / samples);
+        const filteredData: number[] = [];
+        
+        for (let i = 0; i < samples; i++) {
+          let sum = 0;
+          for (let j = 0; j < blockSize; j++) {
+            sum += Math.abs(rawData[i * blockSize + j]);
+          }
+          filteredData.push(sum / blockSize);
+        }
+        
+        // Normalize
+        const maxVal = Math.max(...filteredData);
+        const normalized = filteredData.map(v => v / maxVal);
+        setWaveformData(normalized);
+      })
+      .catch(err => {
+        console.error("Waveform load error:", err);
+        // Fallback to random waveform
+        const fallback = Array.from({ length: 200 }, () => Math.random() * 0.8 + 0.2);
+        setWaveformData(fallback);
+      });
+
+    return () => {
+      audioContext.close();
+    };
+  }, [audioUrl]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || waveformData.length === 0) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const barWidth = width / waveformData.length;
+    const centerY = height / 2;
+
+    ctx.clearRect(0, 0, width, height);
+    
+    // Background
+    ctx.fillStyle = "#2a2a2a";
+    ctx.fillRect(0, 0, width, height);
+
+    // Waveform color
+    const waveColor = isMuted ? "#666" : color;
+    ctx.fillStyle = waveColor;
+
+    // Draw bars (mirror effect)
+    waveformData.forEach((value, index) => {
+      const barHeight = value * height * 0.8;
+      const x = index * barWidth;
+      const y = centerY - barHeight / 2;
+      ctx.fillRect(x, y, barWidth - 0.5, barHeight);
+    });
+
+    // Center line
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    ctx.lineTo(width, centerY);
+    ctx.stroke();
+  }, [waveformData, color, isMuted]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={400}
+      height={50}
+      className="w-full h-[50px] rounded"
+    />
+  );
+}
+
+export function StemSeparationPanel(): React.ReactElement {
+  const [originalFile, setOriginalFile] = useState<File | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState<boolean>(false);
+  const [stems, setStems] = useState<StemData[]>([]);
+  const [isPlayingAll, setIsPlayingAll] = useState<boolean>(false);
+
+  const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
+
+  const handleFileSelect = useCallback((file: File): void => {
     setOriginalFile(file);
     setIsDialogOpen(true);
-  }, [originalAudioUrl]);
+  }, []);
 
-  /**
-   * 스템 추출 완료 핸들러
-   */
   const handleExtractComplete = useCallback(
-    (extractedStems: NonNullable<NonNullable<StemJobStatus["result"]>["stems"]>) => {
+    (extractedStems: NonNullable<NonNullable<StemJobStatus["result"]>["stems"]>): void => {
       if (!extractedStems || !originalFile) return;
 
-      const newStems: StemData[] = [];
       const baseName = originalFile.name.replace(/\.[^.]+$/, "");
+      const newStems: StemData[] = [];
 
+      // Demucs returns: drums, bass, vocals, other
       if (extractedStems.drums) {
-        newStems.push({
-          id: "drums",
-          name: `${baseName}_Drums`,
-          color: stemColors.drums,
-          audioUrl: getStemDownloadUrl(extractedStems.drums),
-          volume: 1,
-          isSolo: false,
-          isMuted: false,
-          isPlaying: false,
-        });
+        newStems.push({ id: "drums", name: `${baseName}_Drums`, color: stemColors.drums, audioUrl: getStemDownloadUrl(extractedStems.drums), volume: 1, isSolo: false, isMuted: false, isPlaying: false, waveformData: [] });
       }
-
       if (extractedStems.bass) {
-        newStems.push({
-          id: "bass",
-          name: `${baseName}_Bass`,
-          color: stemColors.bass,
-          audioUrl: getStemDownloadUrl(extractedStems.bass),
-          volume: 1,
-          isSolo: false,
-          isMuted: false,
-          isPlaying: false,
-        });
+        newStems.push({ id: "bass", name: `${baseName}_Bass`, color: stemColors.bass, audioUrl: getStemDownloadUrl(extractedStems.bass), volume: 1, isSolo: false, isMuted: false, isPlaying: false, waveformData: [] });
       }
-
-      if (extractedStems.instruments) {
-        newStems.push({
-          id: "instruments",
-          name: `${baseName}_Instruments`,
-          color: stemColors.instruments,
-          audioUrl: getStemDownloadUrl(extractedStems.instruments),
-          volume: 1,
-          isSolo: false,
-          isMuted: false,
-          isPlaying: false,
-        });
-      }
-
       if (extractedStems.vocals) {
-        newStems.push({
-          id: "vocals",
-          name: `${baseName}_Vocals`,
-          color: stemColors.vocals,
-          audioUrl: getStemDownloadUrl(extractedStems.vocals),
-          volume: 1,
-          isSolo: false,
-          isMuted: false,
-          isPlaying: false,
-        });
+        newStems.push({ id: "vocals", name: `${baseName}_Vocals`, color: stemColors.vocals, audioUrl: getStemDownloadUrl(extractedStems.vocals), volume: 1, isSolo: false, isMuted: false, isPlaying: false, waveformData: [] });
+      }
+      // 'other' from demucs (or 'instruments' for backward compatibility)
+      if (extractedStems.other) {
+        newStems.push({ id: "other", name: `${baseName}_Other`, color: stemColors.other, audioUrl: getStemDownloadUrl(extractedStems.other), volume: 1, isSolo: false, isMuted: false, isPlaying: false, waveformData: [] });
+      } else if (extractedStems.instruments) {
+        newStems.push({ id: "other", name: `${baseName}_Other`, color: stemColors.other, audioUrl: getStemDownloadUrl(extractedStems.instruments), volume: 1, isSolo: false, isMuted: false, isPlaying: false, waveformData: [] });
       }
 
       setStems(newStems);
+      setIsDialogOpen(false);
     },
-    [originalFile, stemColors]
+    [originalFile]
   );
 
-  /**
-   * 스템 변경 시 Audio 요소 생성 및 연결
-   */
+  // Initialize audio elements when stems change
   useEffect(() => {
-    // 기존 Audio 요소들 정리
-    stemsAudioRefs.current.forEach(audio => {
-      audio.pause();
-      audio.src = '';
-    });
-    stemsAudioRefs.current.clear();
-
-    // 새 스템에 대한 Audio 요소 생성
-    stems.forEach(stem => {
-      if (stem.audioUrl) {
+    stems.forEach((stem: StemData) => {
+      if (stem.audioUrl && !audioRefs.current.has(stem.id)) {
         const audio = new Audio(stem.audioUrl);
-        audio.volume = stem.volume;
-        stemsAudioRefs.current.set(stem.id, audio);
+        audioRefs.current.set(stem.id, audio);
       }
     });
 
     return () => {
-      // cleanup 시 모든 Audio 정리
-      stemsAudioRefs.current.forEach(audio => {
-        audio.pause();
-        audio.src = '';
-      });
+      audioRefs.current.forEach((audio: HTMLAudioElement) => audio.pause());
     };
   }, [stems]);
 
-  /**
-   * 컴포넌트 언마운트 시 원본 오디오 URL 정리
-   */
+  // Update audio playback based on state
   useEffect(() => {
-    return () => {
-      if (originalAudioUrl) {
-        URL.revokeObjectURL(originalAudioUrl);
+    const hasSolo = stems.some((s: StemData) => s.isSolo);
+
+    stems.forEach((stem: StemData) => {
+      const audio = audioRefs.current.get(stem.id);
+      if (audio) {
+        const shouldMute = stem.isMuted || (hasSolo && !stem.isSolo);
+        audio.volume = shouldMute ? 0 : stem.volume;
+
+        if (stem.isPlaying) {
+          audio.play().catch(() => {});
+        } else {
+          audio.pause();
+        }
       }
-    };
-  }, [originalAudioUrl]);
+    });
+  }, [stems]);
 
-  /**
-   * 볼륨 변경 핸들러
-   */
-  const handleVolumeChange = useCallback((stemId: string, volume: number) => {
-    setStems((prev) =>
-      prev.map((stem) =>
-        stem.id === stemId ? { ...stem, volume } : stem
-      )
-    );
-  }, []);
-
-  /**
-   * Solo 토글 핸들러
-   */
-  const handleSoloToggle = useCallback((stemId: string) => {
-    setStems((prev) =>
-      prev.map((stem) =>
-        stem.id === stemId ? { ...stem, isSolo: !stem.isSolo } : stem
-      )
-    );
-  }, []);
-
-  /**
-   * Mute 토글 핸들러
-   */
-  const handleMuteToggle = useCallback((stemId: string) => {
-    setStems((prev) =>
-      prev.map((stem) =>
-        stem.id === stemId ? { ...stem, isMuted: !stem.isMuted } : stem
-      )
-    );
-  }, []);
-
-  /**
-   * 개별 재생 토글 핸들러
-   */
-  const handlePlayToggle = useCallback((stemId: string) => {
-    setStems((prev) =>
-      prev.map((stem) =>
-        stem.id === stemId ? { ...stem, isPlaying: !stem.isPlaying } : stem
-      )
-    );
-  }, []);
-
-  /**
-   * 전체 재생 토글 핸들러
-   */
-  const handlePlayAllToggle = useCallback(() => {
-    const newPlayingState = !isPlayingAll;
-    setIsPlayingAll(newPlayingState);
-    setStems((prev) =>
-      prev.map((stem) => ({ ...stem, isPlaying: newPlayingState }))
-    );
+  const handlePlayAllToggle = useCallback((): void => {
+    const newState = !isPlayingAll;
+    setIsPlayingAll(newState);
+    
+    // Reset all tracks to beginning when playing
+    if (newState) {
+      audioRefs.current.forEach((audio: HTMLAudioElement) => {
+        audio.currentTime = 0;
+      });
+    }
+    
+    setStems((prev: StemData[]) => prev.map((s: StemData) => ({ ...s, isPlaying: newState })));
   }, [isPlayingAll]);
 
-  /**
-   * 개별 스템 Export 핸들러
-   */
-  const handleExport = useCallback((stemId: string) => {
-    const stem = stems.find((s) => s.id === stemId);
-    if (!stem?.audioUrl) return;
+  // Solo toggle - mutes all other tracks when enabled
+  const handleSoloToggle = useCallback((id: string): void => {
+    setStems((prev: StemData[]) => {
+      const targetTrack = prev.find(s => s.id === id);
+      const newSoloState = targetTrack ? !targetTrack.isSolo : false;
+      
+      return prev.map((s: StemData) => {
+        if (s.id === id) {
+          // Toggle Solo on this track, clear its Mute
+          return { ...s, isSolo: newSoloState, isMuted: false };
+        } else {
+          // If enabling Solo, mute all other tracks
+          // If disabling Solo, unmute other tracks (unless they have their own Solo)
+          if (newSoloState) {
+            return { ...s, isMuted: true };
+          } else {
+            // Check if any OTHER track still has Solo
+            const otherHasSolo = prev.some(other => other.id !== id && other.isSolo);
+            if (!otherHasSolo) {
+              return { ...s, isMuted: false };
+            }
+          }
+          return s;
+        }
+      });
+    });
+  }, []);
 
-    // 실제 구현에서는 audioUrl에서 다운로드
-    console.log(`Exporting ${stem.name}...`);
-    
-    // Mock: 다운로드 링크 생성
+  // Mute toggle - also clears Solo on the same track
+  const handleMuteToggle = useCallback((id: string): void => {
+    setStems((prev: StemData[]) => prev.map((s: StemData) => {
+      if (s.id === id) {
+        // If enabling Mute, disable Solo
+        return { ...s, isMuted: !s.isMuted, isSolo: !s.isMuted ? false : s.isSolo };
+      }
+      return s;
+    }));
+  }, []);
+
+  const handlePlayToggle = useCallback((id: string): void => {
+    setStems((prev: StemData[]) => prev.map((s: StemData) => s.id === id ? { ...s, isPlaying: !s.isPlaying } : s));
+  }, []);
+
+  const handleVolumeChange = useCallback((id: string, volume: number): void => {
+    setStems((prev: StemData[]) => prev.map((s: StemData) => s.id === id ? { ...s, volume } : s));
+  }, []);
+
+  const handleExport = useCallback((stem: StemData): void => {
+    if (!stem.audioUrl) return;
     const link = document.createElement("a");
     link.href = stem.audioUrl;
     link.download = `${stem.name}.wav`;
     link.click();
-  }, [stems]);
-
-  /**
-   * 믹스 Export 핸들러
-   */
-  const handleExportMix = useCallback(() => {
-    console.log("Exporting mix with current levels...");
-    // 실제 구현에서는 현재 볼륨 레벨로 믹스다운
   }, []);
 
-  /**
-   * Mixer에 추가 핸들러
-   * 분리된 스템들을 Mixer 트랙으로 전달
-   */
-  const handleAddToMixer = useCallback(() => {
-    console.log("Adding stems to mixer...");
-    
-    // 커스텀 이벤트로 스템 데이터 전달
-    const stemData = stems.map(stem => ({
-      id: stem.id,
-      name: stem.name,
-      color: stem.color,
-      audioUrl: stem.audioUrl,
-      volume: stem.volume,
-    }));
-    
-    window.dispatchEvent(new CustomEvent('add-stems-to-mixer', { 
-      detail: { stems: stemData } 
-    }));
-    
-    // Mixer 페이지로 이동 (옵션)
-    // window.location.href = '/';
-    console.log(`${stems.length}개의 스템이 Mixer에 추가되었습니다.`);
-  }, [stems]);
-
-  /**
-   * Piano Roll에 추가 핸들러
-   * 분리된 스템을 Piano Roll로 전달하여 편집
-   */
-  const handleSendToPianoRoll = useCallback(() => {
-    console.log("Sending stems to piano roll...");
-    
-    // 스템 데이터를 세션 스토리지에 저장
-    const stemData = stems.map(stem => ({
-      id: stem.id,
-      name: stem.name,
-      color: stem.color,
-      audioUrl: stem.audioUrl,
-    }));
-    
-    sessionStorage.setItem('stemDataForPianoRoll', JSON.stringify(stemData));
-    
-    // Piano Roll 페이지로 이동
-    window.location.href = '/synth';
-  }, [stems]);
-
-  /**
-   * A/B 비교 토글 핸들러
-   * 원본/분리 오디오 전환 및 실제 재생
-   */
-  const handleABToggle = useCallback(() => {
-    if (!isABMode) {
-      // A/B 모드 진입
-      setIsABMode(true);
-      setShowOriginal(true);
-      
-      // 원본 오디오 재생 시작
-      if (originalAudioUrl && originalAudioRef.current) {
-        // 스템 오디오 모두 정지
-        stemsAudioRefs.current.forEach(audio => {
-          audio.pause();
-          audio.currentTime = 0;
-        });
-        originalAudioRef.current.play().catch(e => console.warn('원본 오디오 재생 실패:', e));
-      }
-    } else {
-      // A/B 전환
-      const newShowOriginal = !showOriginal;
-      setShowOriginal(newShowOriginal);
-      
-      if (newShowOriginal) {
-        // 원본 재생, 스템 정지
-        stemsAudioRefs.current.forEach(audio => {
-          audio.pause();
-        });
-        if (originalAudioRef.current) {
-          originalAudioRef.current.play().catch(e => console.warn('원본 오디오 재생 실패:', e));
-        }
-      } else {
-        // 스템 재생, 원본 정지
-        if (originalAudioRef.current) {
-          originalAudioRef.current.pause();
-        }
-        stemsAudioRefs.current.forEach(audio => {
-          audio.play().catch(e => console.warn('스템 오디오 재생 실패:', e));
-        });
-      }
-    }
-  }, [isABMode, showOriginal, originalAudioUrl]);
-
-  /**
-   * A/B 모드 해제
-   * 모든 오디오 정지
-   */
-  const handleExitABMode = useCallback(() => {
-    setIsABMode(false);
-    setShowOriginal(true);
-    
-    // 모든 오디오 정지
-    if (originalAudioRef.current) {
-      originalAudioRef.current.pause();
-      originalAudioRef.current.currentTime = 0;
-    }
-    stemsAudioRefs.current.forEach(audio => {
-      audio.pause();
-      audio.currentTime = 0;
-    });
-  }, []);
-
-  /**
-   * 새 파일 분리 핸들러
-   */
-  const handleNewExtraction = useCallback(() => {
-    setOriginalFile(null);
+  const handleNewExtraction = useCallback((): void => {
+    audioRefs.current.forEach((audio: HTMLAudioElement) => audio.pause());
+    audioRefs.current.clear();
     setStems([]);
+    setOriginalFile(null);
+    setIsPlayingAll(false);
   }, []);
 
   return (
-    <div className="flex flex-col h-full bg-[#1a1a1a] text-white p-4 space-y-4">
-      {/* 헤더 */}
+    <div className="flex flex-col h-full bg-[#1a1a1a] text-white p-4 space-y-3">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Layers className="w-5 h-5 text-blue-500" />
           <h2 className="text-lg font-semibold">Stem Separation</h2>
         </div>
         {stems.length > 0 && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleNewExtraction}
-            className="bg-transparent border-gray-600 text-gray-300 hover:bg-gray-700"
-          >
+          <Button size="sm" variant="outline" onClick={handleNewExtraction} className="bg-transparent border-gray-600 text-gray-300 hover:bg-gray-700">
             <Plus className="w-4 h-4 mr-1" />
             새 파일
           </Button>
         )}
       </div>
 
-      {/* 메인 컨텐츠 */}
+      {/* Content */}
       {stems.length === 0 ? (
-        // 파일 업로드 영역
         <div className="flex-1 flex items-center justify-center">
           <div className="w-full max-w-xl">
             <StemDropZone onFileSelect={handleFileSelect} />
           </div>
         </div>
       ) : (
-        // 분리된 스템 표시
-        <div className="flex-1 flex flex-col space-y-4 overflow-y-auto">
-          {/* 원본 파일 정보 */}
+        <div className="flex-1 flex flex-col space-y-3 overflow-y-auto">
+          {/* File Info */}
           <div className="flex items-center justify-between px-3 py-2 bg-[#252525] rounded-lg">
             <div className="flex items-center gap-2">
               <span className="text-gray-400 text-sm">원본:</span>
               <span className="text-white font-medium">{originalFile?.name}</span>
             </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={handleNewExtraction}
-              className="text-gray-400 hover:text-white"
-            >
+            <Button size="sm" variant="ghost" onClick={handleNewExtraction} className="text-gray-400 hover:text-white">
               변경
             </Button>
           </div>
 
-          {/* 스템 트랙 목록 */}
+          {/* Stem Tracks */}
           <div className="space-y-2">
-            {stems.map((stem) => (
-              <StemTrack
+            {stems.map((stem: StemData) => (
+              <div
                 key={stem.id}
-                name={stem.name}
-                color={stem.color}
-                audioUrl={stem.audioUrl}
-                volume={stem.volume}
-                isSolo={stem.isSolo}
-                isMuted={stem.isMuted}
-                isPlaying={stem.isPlaying}
-                onVolumeChange={(vol) => handleVolumeChange(stem.id, vol)}
-                onSoloToggle={() => handleSoloToggle(stem.id)}
-                onMuteToggle={() => handleMuteToggle(stem.id)}
-                onPlayToggle={() => handlePlayToggle(stem.id)}
-                onExport={() => handleExport(stem.id)}
-              />
+                className="flex items-center gap-3 p-3 rounded-lg bg-[#252525] border-l-4"
+                style={{ borderLeftColor: stem.color }}
+              >
+                {/* Track Info + S/M buttons */}
+                <div className="flex flex-col min-w-[140px]">
+                  <span className="text-sm font-medium text-white truncate">{stem.name}</span>
+                  <div className="flex gap-1 mt-1">
+                    <Button
+                      size="sm"
+                      onClick={() => handleSoloToggle(stem.id)}
+                      className={`h-6 w-6 p-0 text-xs ${stem.isSolo ? "bg-yellow-500 hover:bg-yellow-600 text-black" : "bg-transparent border border-gray-600 text-gray-400 hover:bg-gray-700"}`}
+                    >
+                      S
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleMuteToggle(stem.id)}
+                      className={`h-6 w-6 p-0 text-xs ${stem.isMuted ? "bg-red-500 hover:bg-red-600 text-white" : "bg-transparent border border-gray-600 text-gray-400 hover:bg-gray-700"}`}
+                    >
+                      M
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Play Button */}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handlePlayToggle(stem.id)}
+                  className="h-8 w-8 p-0"
+                >
+                  {stem.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                </Button>
+
+                {/* Real Waveform */}
+                <div className="flex-1">
+                  <WaveformCanvas
+                    audioUrl={stem.audioUrl}
+                    color={stem.color}
+                    isMuted={stem.isMuted}
+                  />
+                </div>
+
+                {/* Volume */}
+                <div className="flex items-center gap-2 min-w-[120px]">
+                  <Volume2 className="h-4 w-4 text-gray-400" />
+                  <Slider
+                    value={[stem.volume * 100]}
+                    onValueChange={(val: number[]) => handleVolumeChange(stem.id, val[0] / 100)}
+                    max={100}
+                    step={1}
+                    className="w-16"
+                  />
+                  <span className="text-xs text-gray-400 w-10 text-right">{Math.round(stem.volume * 100)}%</span>
+                </div>
+
+                {/* Export */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleExport(stem)}
+                  className="bg-transparent border-gray-600 text-gray-300 hover:bg-gray-700"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Export
+                </Button>
+              </div>
             ))}
           </div>
 
-          {/* 컨트롤 버튼 */}
-          <div className="flex items-center justify-between pt-4 border-t border-gray-700">
+          {/* Play All Button */}
+          <div className="pt-2">
             <Button
               onClick={handlePlayAllToggle}
-              className="bg-green-600 hover:bg-green-700"
+              className="w-full bg-green-600 hover:bg-green-700 h-12 text-lg"
             >
-              {isPlayingAll ? (
-                <>
-                  <Pause className="w-4 h-4 mr-2" />
-                  Pause All
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 mr-2" />
-                  Play All
-                </>
-              )}
+              {isPlayingAll ? <Pause className="w-5 h-5 mr-2" /> : <Play className="w-5 h-5 mr-2" />}
+              Play All
             </Button>
-
-             <div className="flex gap-2">
-              {/* A/B 비교 버튼 */}
-              {stems.length > 0 && (
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant={isABMode ? "default" : "outline"}
-                    size="sm"
-                    onClick={handleABToggle}
-                    className={isABMode ? "bg-purple-600 hover:bg-purple-700" : "bg-transparent border-gray-600"}
-                  >
-                    A/B {showOriginal ? "원본" : "분리"}
-                  </Button>
-                  {isABMode && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleExitABMode}
-                      className="text-gray-400 hover:text-white"
-                    >
-                      ×
-                    </Button>
-                  )}
-                </div>
-              )}
-              <Button
-                variant="outline"
-                onClick={handleExportMix}
-                className="bg-transparent border-gray-600 text-gray-300 hover:bg-gray-700"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Export Mix
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleSendToPianoRoll}
-                className="bg-transparent border-orange-600 text-orange-300 hover:bg-orange-900"
-              >
-                🎹 Piano Roll
-              </Button>
-              <Button
-                onClick={handleAddToMixer}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add to Mixer
-              </Button>
-            </div>
           </div>
         </div>
       )}
 
-      {/* 스템 추출 다이얼로그 */}
+      {/* Extraction Dialog */}
       <StemExtractionDialog
         isOpen={isDialogOpen}
         onClose={() => setIsDialogOpen(false)}
@@ -538,16 +406,6 @@ export function StemSeparationPanel() {
         fileName={originalFile?.name}
         audioFile={originalFile || undefined}
       />
-
-      {/* 숨겨진 원본 오디오 요소 (A/B 테스트용) */}
-      {originalAudioUrl && (
-        <audio
-          ref={originalAudioRef}
-          src={originalAudioUrl}
-          style={{ display: 'none' }}
-          preload="auto"
-        />
-      )}
     </div>
   );
 }

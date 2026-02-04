@@ -48,6 +48,7 @@ export interface StemJobStatus {
       bass?: string;
       vocals?: string;
       instruments?: string;
+      other?: string;  // demucs outputs 'other', not 'instruments'
     };
   };
   error?: string;

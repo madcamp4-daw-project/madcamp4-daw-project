@@ -58,11 +58,16 @@ def separate_stems(track_filename):
         import torch
         if torch.cuda.is_available():
             device = "cuda"
-            print(json.dumps({"progress": 0, "message": "GPU 사용 가능! CUDA 모드로 실행합니다."}), flush=True)
+            gpu_name = torch.cuda.get_device_name(0)
+            print(json.dumps({"progress": 0, "message": f"GPU 사용 가능! CUDA 모드로 실행합니다. ({gpu_name})"}), flush=True)
+            sys.stderr.write(f"Detected GPU: {gpu_name}\n")
         else:
             print(json.dumps({"progress": 0, "message": "GPU를 찾을 수 없습니다. CPU 모드로 전환합니다. (느림)"}), flush=True)
-    except:
-        print(json.dumps({"progress": 0, "message": "Torch 확인 실패. CPU 안전모드로 실행합니다."}), flush=True)
+            sys.stderr.write("No GPU detected. Using CPU.\n")
+    except ImportError:
+        print(json.dumps({"progress": 0, "message": "Torch 모듈이 설치되지 않았습니다. CPU로 실행합니다."}), flush=True)
+    except Exception as e:
+        print(json.dumps({"progress": 0, "message": f"Torch 확인 중 오류 발생: {e}. CPU 안전모드로 실행합니다."}), flush=True)
 
     cmd = [
         sys.executable, "-m", "demucs",
