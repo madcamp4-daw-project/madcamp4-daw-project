@@ -15,3 +15,15 @@ server/.env
 server/uploads/
 
 client/.next
+
+client/.next
+
+server/venv
+server/output
+server/services/ffmpeg.exe
+server/services/ffprobe.exe
+
+client/.next/
+
+*.pyc
+*.wav
