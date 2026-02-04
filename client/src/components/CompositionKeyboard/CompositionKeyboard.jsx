@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { uploadPianoRecord } from '../../api/audioApi';
-import { useDJStore } from '../../store/useDJStore';
+import useProjectStore from '../../store/useProjectStore';
 import { useUploadProgress } from '../../hooks/useUploadProgress';
 import styles from './CompositionKeyboard.module.css';
 
@@ -8,12 +8,12 @@ import styles from './CompositionKeyboard.module.css';
  * SynthPiano 컴포넌트
  * 가상 피아노 키보드 - Classic B/W Theme + Draggable Control Panel
  */
-const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClose }) => {
-    // 전역 상태
-    const bpm = useDJStore(state => state.bpm);
-    const setBpm = useDJStore(state => state.setBpm);
-    const isMetronomeOn = useDJStore(state => state.isMetronomeOn);
-    const setIsMetronomeOn = useDJStore(state => state.setIsMetronomeOn);
+const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClose, embedded = false }) => {
+    // 전역 상태 (Studio useProjectStore)
+    const bpm = useProjectStore(state => state.bpm);
+    const setBpm = useProjectStore(state => state.setBpm);
+    const isMetronomeOn = useProjectStore(state => state.isMetronomeOn);
+    const setIsMetronomeOn = useProjectStore(state => state.setIsMetronomeOn);
 
     // 옥타브 시프트 상태
     const [octaveShift, setOctaveShift] = useState(0);
@@ -21,6 +21,7 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
     const MAX_SHIFT = 2;
 
     const [pressedKeys, setPressedKeys] = useState(new Set());
+    const [showSequencer, setShowSequencer] = useState(false); // Added missing state
 
     // 녹음 상태
     const [isRecording, setIsRecording] = useState(false);
@@ -51,9 +52,9 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
     // 언마운트 시 메트로놈 정지
     useEffect(() => {
         return () => {
-            if (useDJStore.getState().isMetronomeOn) {
-                useDJStore.getState().setIsMetronomeOn(false);
-              }
+            if (useProjectStore.getState().isMetronomeOn) {
+                useProjectStore.getState().setIsMetronomeOn(false);
+            }
         };
     }, []);
 
@@ -181,7 +182,7 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
         }
     };
 
-    const triggerLibraryRefresh = useDJStore(state => state.triggerLibraryRefresh);
+    const triggerLibraryRefresh = useProjectStore(state => state.triggerLibraryRefresh);
 
     // 녹음 토글
     const toggleRecording = async () => {
@@ -304,20 +305,29 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
         };
     }, [pressedKeys, previewMode, octaveShift, ivoryKeys, ebonyKeys]);
 
-    return (
-        <div className={styles.synthOverlay}>
-            {/* 타이틀 (배경 중앙 고정) */}
-            <h1 className={styles.mainTitle} style={{ position: 'absolute', top: '10%', zIndex: 0 }}>
-                {previewMode ? `PREVIEW MODE` : 'SYNTH KEYBOARD'}
-            </h1>
+    const rootClass = embedded ? styles.synthEmbedded : styles.synthOverlay;
 
-            {/* 컨트롤 패널 (Draggable) */}
-            <div 
-                className={styles.controlBar} 
+    return (
+        <div className={rootClass}>
+            {!embedded && (
+                <h1 className={styles.mainTitle} style={{ position: 'absolute', top: '10%', zIndex: 0 }}>
+                    {previewMode ? `PREVIEW MODE` : 'SYNTH KEYBOARD'}
+                </h1>
+            )}
+
+            {/* 컨트롤 패널 (Draggable; 임베드 시에는 정적 배치) */}
+            <div
+                className={embedded ? styles.controlBarEmbedded : styles.controlBar}
                 ref={panelRef}
-                onMouseDown={handleMouseDown}
+                onMouseDown={embedded ? undefined : handleMouseDown}
             >
-                <div className={styles.controlHeader}>Control Panel</div>
+                {embedded ? (
+                    <div className={styles.controlHeader} style={{ color: '#ccc', borderColor: '#555' }}>
+                        Instrument Rack
+                    </div>
+                ) : (
+                    <div className={styles.controlHeader}>Control Panel</div>
+                )}
 
                 {/* 악기 선택 */}
                 <select 
@@ -326,8 +336,15 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
                     onChange={handleInstrumentChange}
                     onMouseDown={(e) => e.stopPropagation()} // 드래그 방지
                 >
-                    <option value="synth">Synth</option>
-                    <option value="piano">Grand Piano</option>
+                    <option value="synth">Basic Synth (Triangle)</option>
+                    <option value="fmsynth">FM Synth (DX7)</option>
+                    <option value="amsynth">AM Synth (Bell)</option>
+                    <option value="membranesynth">Membrane Synth (Kick)</option>
+                    <option value="metalsynth">Metal Synth (Cymbal)</option>
+                    <option value="monosynth">Mono Synth (Analog)</option>
+                    <option value="duosynth">Duo Synth (Stacked)</option>
+                    <option value="plucksynth">Pluck Synth (String)</option>
+                    <option value="piano">Grand Piano (Sampled)</option>
                 </select>
 
                 <div className={styles.separator}></div>
@@ -360,6 +377,31 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
 
                 <div className={styles.separator}></div>
 
+                {/* ARPEGGIATOR (NEW) */}
+                <ArpeggiatorControl 
+                    instrumentManager={instrumentManager} 
+                    padId={padId} 
+                    pressedKeys={pressedKeys}
+                />
+
+                <div className={styles.separator}></div>
+                
+                {/* SEQUENCER BUTTON (NEW) */}
+                <button
+                    onClick={() => {
+                        const next = !showSequencer;
+                        setShowSequencer(next);
+                        // Stop Sequencer if closing? Maybe keep running.
+                    }}
+                    className={styles.actionButton}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    style={{ background: showSequencer ? '#00e5ff' : '#444', color: showSequencer ? '#000' : '#fff' }}
+                >
+                    {showSequencer ? 'Hide Sequencer' : 'Show Sequencer'}
+                </button>
+                <div className={styles.separator}></div>
+
+
                 {/* 녹음 및 닫기 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
                     {/* 메트로놈 */}
@@ -383,17 +425,25 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
                         </button>
                     )}
 
-                    <button
-                        onClick={onClose}
-                        className={`${styles.actionButton} ${styles.exitButton}`}
-                        onMouseDown={(e) => e.stopPropagation()}
-                    >
-                        CLOSE PANEL
-                    </button>
+                    {!embedded && (
+                        <button
+                            onClick={onClose}
+                            className={`${styles.actionButton} ${styles.exitButton}`}
+                            onMouseDown={(e) => e.stopPropagation()}
+                        >
+                            CLOSE PANEL
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* 피아노 컨테이너 */}
+            {/* Step Sequencer Overlay */}
+            {showSequencer && (
+                <StepSequencer onClose={() => setShowSequencer(false)} />
+            )}
+
+            {/* 피아노 컨테이너 (임베드 시 남은 공간 채움) */}
+            <div className={embedded ? styles.keyboardAreaEmbedded : undefined}>
             <div className={styles.keyboardWrapper}>
 
                 {/* 힌트 텍스트 */}
@@ -420,7 +470,215 @@ const SynthPiano = ({ padId, previewMode, type, preset, instrumentManager, onClo
                 />
 
             </div>
+            </div>
         </div>
+    );
+};
+
+// ... existing KeyboardRow ...
+
+/**
+ * Arpeggiator Control Component
+ */
+const ArpeggiatorControl = ({ instrumentManager, padId, pressedKeys }) => {
+    const [isOn, setIsOn] = useState(false);
+    const [rate, setRate] = useState('8n');
+    const [type, setType] = useState('up');
+    const patternRef = useRef(null);
+
+    useEffect(() => {
+        if (isOn && pressedKeys.size > 0) {
+            // Stop previous
+            if (patternRef.current) {
+                patternRef.current.dispose();
+            }
+
+            // Create Pattern
+            const notes = Array.from(pressedKeys).sort(); // Sort for Up pattern basic
+            // For real arpeggiators, we might want 'down', 'upDown', 'random' sorting logic
+            
+            patternRef.current = new Tone.Pattern((time, note) => {
+                // Play note
+                 if (instrumentManager.activeInstrument === 'piano' && instrumentManager.isSamplerLoaded) {
+                    instrumentManager.sampler.triggerAttackRelease(note, rate, time);
+                } else if (instrumentManager.synth) {
+                    instrumentManager.synth.triggerAttackRelease(note, rate, time);
+                }
+            }, notes, type);
+            
+            patternRef.current.interval = rate;
+            patternRef.current.start(0);
+            
+            if (Tone.Transport.state !== 'started') {
+                 Tone.Transport.start();
+            }
+
+        } else {
+             // Stop or Empty
+             if (patternRef.current) {
+                patternRef.current.stop();
+                patternRef.current.dispose();
+                patternRef.current = null;
+            }
+        }
+
+        return () => {
+             if (patternRef.current) patternRef.current.dispose();
+        }
+    }, [isOn, pressedKeys, rate, type, instrumentManager]);
+
+    return (
+        <div style={{ display:'flex', flexDirection:'column', width:'100%', gap:'5px', padding:'5px 0' }}>
+            <span style={{fontSize:'0.7rem', fontWeight:'bold', color:'#888'}}>ARPEGGIATOR</span>
+            <div style={{display:'flex', gap:'5px'}}>
+                <button 
+                   onClick={()=>setIsOn(!isOn)} 
+                   style={{
+                       flex:1, 
+                       background: isOn ? '#00e5ff' : '#444', color: isOn?'#000':'#fff',
+                       border:'none', borderRadius:'4px', fontSize:'0.7rem', cursor:'pointer'
+                   }}
+                   onMouseDown={e=>e.stopPropagation()}
+                >
+                    {isOn ? 'ON' : 'OFF'}
+                </button>
+                <select 
+                    value={rate} 
+                    onChange={e=>setRate(e.target.value)}
+                    style={{flex:1, fontSize:'0.7rem'}}
+                    onMouseDown={e=>e.stopPropagation()}
+                >
+                    <option value="4n">1/4</option>
+                    <option value="8n">1/8</option>
+                    <option value="16n">1/16</option>
+                    <option value="32n">1/32</option>
+                </select>
+            </div>
+             <select 
+                value={type} 
+                onChange={e=>setType(e.target.value)}
+                style={{width:'100%', fontSize:'0.7rem'}}
+                onMouseDown={e=>e.stopPropagation()}
+            >
+                <option value="up">Up</option>
+                <option value="down">Down</option>
+                <option value="upDown">Up-Down</option>
+                <option value="random">Random</option>
+            </select>
+        </div>
+    );
+};
+
+// Simple Step Sequencer Component (16 step x 4 track)
+const StepSequencer = ({ onClose }) => {
+    const [steps, setSteps] = useState(Array(4).fill(null).map(() => Array(16).fill(false))); // 4 tracks (Kick, Snare, HiHat, Clap)
+    const [currentStep, setCurrentStep] = useState(0);
+    const [isPlaying, setIsPlaying] = useState(false);
+    
+    // Synths
+    const playersRef = useRef([]);
+
+    useEffect(() => {
+        // Init Drums
+        const kick = new Tone.MembraneSynth().toDestination();
+        const snare = new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.2, sustain: 0 } }).toDestination();
+        const hihat = new Tone.MetalSynth({ envelope: { attack: 0.001, decay: 0.1, release: 0.01 }, harmonicity:5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5 }).toDestination();
+        const clap = new Tone.MembraneSynth({ pitchDecay: 0.01, octaves: 6, oscillator: { type: 'square' }, envelope: { attack: 0.001, decay: 0.2, sustain: 0 } }).toDestination();
+
+        playersRef.current = [kick, snare, hihat, clap];
+
+        return () => {
+             playersRef.current.forEach(p => p.dispose());
+        }
+    }, []);
+
+    useEffect(() => {
+        let loop = null;
+        if (isPlaying) {
+             loop = new Tone.Loop((time) => {
+                 const step = currentStep; // This clojure might be stale? No, loop callback runs repeatedly.
+                 // Actually relying on state in callback is tricky. Best to use Tone.Transport.scheduleRepeat
+                 // Let's use Tone.Sequence approach or simpler Transport.scheduleRepeat logic updated by ref or separate Effect.
+             }, "16n");
+             // Better: Tone.Sequence
+        }
+    }, [isPlaying]);
+
+    // Better approach: Single Loop using Ref for steps
+    const stepsRef = useRef(steps);
+    stepsRef.current = steps;
+
+    useEffect(() => {
+        const loop = new Tone.Sequence((time, col) => {
+             setCurrentStep(col);
+             stepsRef.current.forEach((row, rowIdx) => {
+                 if (row[col]) {
+                     const velocity = 0.8;
+                     if (rowIdx === 0) playersRef.current[0].triggerAttackRelease("C1", "8n", time, velocity);
+                     else if (rowIdx === 1) playersRef.current[1].triggerAttackRelease("8n", time, velocity);
+                     else if (rowIdx === 2) playersRef.current[2].triggerAttackRelease("32n", time, velocity * 0.5); // Hihat
+                     else if (rowIdx === 3) playersRef.current[3].triggerAttackRelease("C1", "16n", time, velocity); // Clap/Tom
+                 }
+             });
+        }, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], "16n");
+
+        if (isPlaying) {
+            loop.start(0);
+            if (Tone.Transport.state !== 'started') Tone.Transport.start();
+        } else {
+            loop.stop();
+        }
+
+        return () => {
+            loop.dispose();
+        }
+    }, [isPlaying]);
+
+
+    const toggleStep = (row, col) => {
+        const newSteps = [...steps];
+        newSteps[row] = [...newSteps[row]];
+        newSteps[row][col] = !newSteps[row][col];
+        setSteps(newSteps);
+    };
+
+    return (
+         <div style={{
+             position: 'absolute', bottom: '220px', left: '50%', transform: 'translateX(-50%)',
+             width: '80%', background: 'rgba(20,20,20,0.95)', border: '1px solid #444', borderRadius: '8px',
+             padding: '20px', zIndex: 100, color: 'white'
+         }}
+            onMouseDown={e=>e.stopPropagation()}
+         >
+             <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px'}}>
+                 <h3>DRUM SEQUENCER</h3>
+                 <div style={{display:'flex', gap:'10px'}}>
+                    <button onClick={()=>setIsPlaying(!isPlaying)} style={{padding:'5px 15px', background: isPlaying?'#00ff00':'#444', color: isPlaying?'#000':'#fff', border:'none', cursor:'pointer'}}>{isPlaying?'STOP':'PLAY'}</button>
+                    <button onClick={onClose} style={{padding:'5px 15px', background:'#f00', color:'#fff', border:'none', cursor:'pointer'}}>X</button>
+                 </div>
+             </div>
+
+             <div style={{display:'flex', flexDirection:'column', gap:'5px'}}>
+                 {['Kick', 'Snare', 'HiHat', 'Clap'].map((label, rowIdx) => (
+                     <div key={label} style={{display:'flex', alignItems:'center', gap:'5px'}}>
+                         <div style={{width:'60px', fontSize:'0.8rem', color:'#aaa'}}>{label}</div>
+                         {steps[rowIdx].map((isActive, colIdx) => (
+                             <div 
+                                key={colIdx}
+                                onClick={() => toggleStep(rowIdx, colIdx)}
+                                style={{
+                                    width:'30px', height:'30px', 
+                                    background: isActive ? '#00e5ff' : (colIdx === currentStep && isPlaying ? '#555' : '#333'),
+                                    border: colIdx % 4 === 0 ? '1px solid #666' : '1px solid #444',
+                                    cursor: 'pointer',
+                                    borderRadius: '2px'
+                                }}
+                             />
+                         ))}
+                     </div>
+                 ))}
+             </div>
+         </div>
     );
 };
 

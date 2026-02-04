@@ -2,9 +2,9 @@
 
 > **프로젝트**: AI Audio Mixing & Conversion System  
 > **작성일**: 2026-01-29  
-> **버전**: 1.2  
-> **기준 문서**: [PROJECT_PLAN.md](./PROJECT_PLAN.md) (v1.3) — 본 명세는 계획서 기준으로 유지·보완됩니다.  
-> **담당**: 서버 스펙·초안 — 개발자 A / 클라이언트 연동 가이드·에러 코드 정리 — 개발자 B
+> **버전**: 1.3  
+> **기준 문서**: [PROJECT_PLAN.md](./PROJECT_PLAN.md), [FILE_STRUCTURE.md](./FILE_STRUCTURE.md) — 본 프로젝트 공식 문서는 PROJECT_PLAN.md, FILE_STRUCTURE.md, API_SPEC.md 3개입니다.  
+> **담당**: 서버 스펙·초안 — 개발자 A / 클라이언트 연동 가이드·에러 코드·Tone.js 사용 — 개발자 B
 
 ---
 
@@ -15,8 +15,8 @@
 3. [사운드 업로드 및 분석](#3-사운드-업로드-및-분석)
 4. [레이어 분리](#4-레이어-분리)
 5. [블렌드](#5-블렌드)
-6. [신스 피아노](#6-신스-피아노)
-7. [믹스 컨트롤러](#7-믹스-컨트롤러)
+6. [프로젝트 관리](#6-프로젝트-관리)
+7. [샘플 관리](#7-샘플-관리)
 8. [에러 처리](#8-에러-처리)
 9. [클라이언트 연동 가이드](#9-클라이언트-연동-가이드)
 
@@ -265,32 +265,23 @@ http://localhost:3001/api
 
 ---
 
-## 6. 신스 피아노
+## 6. 프로젝트 관리
 
-### 6.1 피아노 연주 녹음 저장
+### 6.1 프로젝트 저장
 
-**엔드포인트**: `POST /api/piano/record`
+**엔드포인트**: `POST /api/project/save`
 
-**설명**: 신스 피아노에서 녹음한 연주를 저장합니다.
+**설명**: 현재 작업 중인 DAW 프로젝트 전체 상태(패턴, 플레이리스트, 믹서 설정)를 저장합니다.
 
 **요청 본문**:
 
 ```json
 {
-  "title": "My Composition",
-  "notes": [
-    {
-      "time": 0.0,
-      "note": "C4",
-      "duration": 0.5
-    },
-    {
-      "time": 0.5,
-      "note": "E4",
-      "duration": 0.5
-    }
-  ],
-  "audioBlob": "base64_encoded_audio_data"
+  "title": "My Song",
+  "bpm": 128,
+  "patterns": { ... },
+  "playlist": [ ... ],
+  "mixer": [ ... ]
 }
 ```
 
@@ -299,124 +290,35 @@ http://localhost:3001/api
 ```json
 {
   "success": true,
-  "presetId": 101,
-  "audioPath": "/piano/101/recording.wav",
-  "message": "녹음 저장 완료"
+  "projectId": 123,
+  "message": "프로젝트 저장 완료"
 }
 ```
+
+### 6.2 프로젝트 로드
+
+**엔드포인트**: `GET /api/project/:projectId`
+
+**설명**: 저장된 프로젝트를 불러옵니다.
 
 ---
 
-## 7. 믹스 컨트롤러
+## 7. 샘플 관리
 
-### 7.1 유닛 상태 조회
+### 7.1 샘플 업로드 (브라우저용)
 
-**엔드포인트**: `GET /api/mixer/units`
+**엔드포인트**: `POST /api/sample/upload`
 
-**설명**: 현재 두 유닛의 상태를 조회합니다.
-
-**응답 예시**:
-
-```json
-{
-  "unit1": {
-    "trackId": 123,
-    "trackTitle": "Song A",
-    "artist": "Artist A",
-    "bpm": 128.5,
-    "isPlaying": true,
-    "currentTime": 45.2,
-    "duration": 180.0,
-    "fx": "SLICER"
-  },
-  "unit2": {
-    "trackId": null,
-    "trackTitle": null,
-    "artist": null,
-    "bpm": 0,
-    "isPlaying": false,
-    "currentTime": 0,
-    "duration": 0,
-    "fx": null
-  }
-}
-```
-
-### 7.2 유닛에 트랙 로드
-
-**엔드포인트**: `POST /api/mixer/load-track`
-
-**설명**: 특정 유닛에 트랙을 로드합니다.
-
-**요청 본문**:
-
-```json
-{
-  "unit": 1,
-  "trackId": 123
-}
-```
+**설명**: 브라우저나 플레이리스트에 사용할 원샷/루프 샘플을 업로드합니다.
 
 **응답 예시**:
 
 ```json
 {
   "success": true,
-  "message": "트랙 로드 완료",
-  "unit": {
-    "trackId": 123,
-    "trackTitle": "Song A",
-    "artist": "Artist A",
-    "bpm": 128.5
-  }
-}
-```
-
-### 7.3 유닛 재생 제어
-
-**엔드포인트**: `POST /api/mixer/unit/:unitId/play`
-
-**설명**: 유닛의 재생을 시작/일시정지합니다.
-
-**요청 본문**:
-
-```json
-{
-  "action": "play"
-}
-```
-
-**응답 예시**:
-
-```json
-{
-  "success": true,
-  "isPlaying": true,
-  "message": "재생 시작"
-}
-```
-
-### 7.4 이펙트 적용
-
-**엔드포인트**: `POST /api/mixer/unit/:unitId/fx`
-
-**설명**: 유닛에 이펙트를 적용합니다.
-
-**요청 본문**:
-
-```json
-{
-  "fx": "SLICER"
-}
-```
-
-**응답 예시**:
-
-```json
-{
-  "success": true,
-  "fx": "SLICER",
-  "message": "이펙트 적용 완료"
+  "sampleId": 456,
+  "url": "/uploads/samples/kick.wav",
+  "duration": 0.45
 }
 ```
 
@@ -482,23 +384,30 @@ http://localhost:3001/api
 
 ### 9.2 에러 코드별 클라이언트 처리 권장
 
-| 에러 코드                 | HTTP | 클라이언트 권장 동작 |
-| ------------------------- | ---- | -------------------- |
-| `INVALID_FILE_TYPE`       | 400  | 업로드 전 확장자/타입 검사, 사용자 안내 메시지 |
+| 에러 코드                 | HTTP | 클라이언트 권장 동작                                 |
+| ------------------------- | ---- | ---------------------------------------------------- |
+| `INVALID_FILE_TYPE`       | 400  | 업로드 전 확장자/타입 검사, 사용자 안내 메시지       |
 | `TRACK_NOT_FOUND`         | 404  | "트랙을 찾을 수 없습니다" 메시지, 목록 새로고침 유도 |
-| `LAYER_SEPARATION_FAILED` | 500  | 재시도 버튼 제공, 로딩/스켈레톤 UI로 대기 표시 |
-| `BPM_MISMATCH`            | 400  | BPM 차이 안내 및 블렌드 포인트 조정 유도 |
-| `BLEND_FAILED`            | 500  | 재시도 또는 파라미터 변경 유도 |
-| `UPLOAD_FAILED`           | 500  | 재시도, `useUploadProgress`로 진행률 표시 |
-| 네트워크 오류 / 타임아웃  | -    | 오프라인/재시도 안내, 필요 시 exponential backoff |
+| `LAYER_SEPARATION_FAILED` | 500  | 재시도 버튼 제공, 로딩/스켈레톤 UI로 대기 표시       |
+| `BPM_MISMATCH`            | 400  | BPM 차이 안내 및 블렌드 포인트 조정 유도             |
+| `BLEND_FAILED`            | 500  | 재시도 또는 파라미터 변경 유도                       |
+| `UPLOAD_FAILED`           | 500  | 재시도, `useUploadProgress`로 진행률 표시            |
+| 네트워크 오류 / 타임아웃  | -    | 오프라인/재시도 안내, 필요 시 exponential backoff    |
 
 ### 9.3 재시도·오프라인
 
 - 장시간 작업(업로드, split, blend)은 폴링 또는 상태 조회 API(`/api/sound/split/:trackId/status`, `/api/sound/blend/:blendId/status`)와 연동하여 진행률 표시.
 - 일시적 오류 시 재시도 로직 적용 권장(예: 최대 2~3회, 지수 백오프).
 
+### 9.4 Tone.js 클라이언트 사용
+
+- **역할 구분**: `audioApi.js`는 REST API(업로드, 분석, 레이어 분리, 블렌드 등) 전용입니다. 악기·이펙트·재생 타이밍은 클라이언트 내 **Tone.js**로 처리하며, REST 엔드포인트를 거치지 않습니다.
+- **Tone.js 초기화**: 브라우저 정책상 오디오 컨텍스트는 사용자 제스처(클릭·터치) 이후에 활성화됩니다. Studio 페이지 마운트 시 `instrumentManager.initialize()`를 호출하며, 사용자가 Studio에 진입한 뒤 악기·Transport 사용이 가능합니다.
+- **전역 타이밍**: `Tone.Transport`가 마스터 클록입니다. BPM·재생/정지는 `useTransport` 훅과 `useProjectStore`의 `bpm`, `isPlaying`과 연동합니다. Toolbar에서 Play/Stop·BPM 입력 시 Transport가 동기됩니다.
+- **악기·이펙트**: Studio Instrument Rack(CompositionKeyboard)에서 `instrumentManager`를 통해 Synth, FM, AM, Membrane, Metal, Mono, Duo, Pluck, Sampler 등 악기 타입을 선택·연주합니다. 믹서 Insert FX·Left Fx Panel은 UI만 제공하며, 향후 Tone.js 이펙트 체인과 연동할 수 있습니다.
+
 ---
 
-**문서 버전**: 1.2  
-**최종 수정일**: 2026-01-30  
-**변경 이력**: v1.2 — PROJECT_PLAN.md v1.3 기준 반영, 담당 역할 명시, §9 클라이언트 연동 가이드 추가(개발자 B)
+**문서 버전**: 1.3  
+**최종 수정일**: 2026-01-31  
+**변경 이력**: v1.3 — §9.4 Tone.js 클라이언트 사용 한국어 첨가, 문서 3개 체계 반영(PROJECT_PLAN, FILE_STRUCTURE, API_SPEC). v1.2 — §9 클라이언트 연동 가이드 추가.
