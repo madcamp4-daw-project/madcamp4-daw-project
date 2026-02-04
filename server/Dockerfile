@@ -1,16 +1,14 @@
 # ==============================================
-# Web DAW Server - Hybrid Node.js + Python
+# Web DAW Server - Hybrid Node.js + Python (GPU Enabled)
 # ==============================================
-# Node.js 20 (Debian Bookworm 기반) - Python 3.11이 기본 내장됨
 FROM node:20-slim
 
-# Set working directory
 WORKDIR /app
 
 # ==============================================
-# 1. System Dependencies (Updated)
+# 1. System Dependencies
 # ==============================================
-# pkg-config 추가: Python 라이브러리 빌드 시 필요할 수 있음
+# pkg-config, build-essential 등 필수 도구 설치
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -27,61 +25,54 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Create symlink for python
+# Symlink python3 -> python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
 # ==============================================
-# 2. Python Virtual Environment & Dependencies
+# 2. Python Setup
 # ==============================================
-# Create virtual environment
+# 가상환경 생성 및 활성화
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Upgrade pip and install build dependencies
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel Cython "numpy<2.0.0"
+# pip 업그레이드
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Copy Python requirements first (for Docker layer caching)
+# [Build Dependencies]
+# Madmom, Librosa 빌드를 위해 Numpy(<2.0.0)와 Cython을 먼저 설치
+RUN pip install --no-cache-dir "numpy<2.0.0" "Cython>=0.29.30"
+
+# requirements.txt 복사
 COPY requirements.txt ./
 
-# [Step A] PyTorch (CPU Version) - Explicit Install
-# requirements.txt에 torch가 있어도, 여기서 CPU 버전을 먼저 강제 설치하여
-# 불필요한 GPU 버전(수 GB) 다운로드를 방지합니다.
+# 🔥 [PyTorch GPU Version] - 핵심 변경 사항
+# Linux/CUDA 12.1 환경에 맞는 버전을 강제 설치합니다.
+# (서버 드라이버 버전에 따라 cu118로 변경 가능)
 RUN pip install --no-cache-dir \
-    torch==2.1.0+cpu \
-    torchaudio==2.1.0+cpu \
-    --index-url https://download.pytorch.org/whl/cpu
+    torch==2.1.2+cu121 \
+    torchaudio==2.1.2+cu121 \
+    --index-url https://download.pytorch.org/whl/cu121
 
-# [Step B] Install Requirements
-# 🔥 중요: requirements.txt에 이미 "numpy<2.0.0"이 명시되어 있으므로
-# 별도의 numpy 설치 라인을 제거하고 requirements.txt를 따릅니다.
-# --no-build-isolation: Pre-installed Cython/numpy refer
+# [Install Remaining Dependencies]
+# --no-build-isolation: 위에서 설치한 numpy/Cython을 활용해 빌드
 RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt
 
 # ==============================================
-# 3. Node.js Dependencies
+# 3. Node.js Setup
 # ==============================================
-# Copy package files first
 COPY package*.json ./
-
-# Install Node.js dependencies
 RUN npm install
 
 # ==============================================
-# 4. Application Code
+# 4. Finalize
 # ==============================================
 COPY . .
 
-# Create necessary directories (권한 문제 방지)
-RUN mkdir -p uploads output && chmod 777 uploads output
+# 권한 설정 (mixed_results 폴더 포함)
+RUN mkdir -p uploads output mixed_results && chmod 777 uploads output mixed_results
 
-# ==============================================
-# 5. Environment & Runtime
-# ==============================================
 EXPOSE 3001
-
 ENV NODE_ENV=production
-# 포트 환경변수 (필요시 수정)
 ENV PORT=3001
 
-# 🔥 주의: 실제 실행 파일명이 index.js인지 server.js인지 확인하세요!
 CMD ["node", "index.js"]
