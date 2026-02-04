@@ -10,24 +10,23 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      # Note: NEXT_PUBLIC_ variables are typically baked in at build time.
-      # To change these dynamically, a rebuild is usually required, or a runtime config strategy.
-      # We are relying on .env.local or build args matching this if strictly needed,
-      # but providing them here satisfies the requirement to have them in compose.
+      # Note: NEXT_PUBLIC_ variables are typically baked in at build time or handled via runtime config.
+      # Client connects to server-gpu (port 8000) by default
       - NEXT_PUBLIC_USE_MOCK=false
       - NEXT_PUBLIC_STEM_API_URL=http://localhost:8000/api/stems
       - NEXT_PUBLIC_TRANSITION_API_URL=http://localhost:8000/api/transition
     depends_on:
-      - server
+      - server-gpu
     restart: always
 
-  server:
+  # Primary Server (GPU Enabled) - Port 8000
+  server-gpu:
     build:
       context: ./server
       dockerfile: Dockerfile
-    container_name: madcamp_server
+    container_name: madcamp_server_gpu
     ports:
-      - "8000:3001" # Map Host 8000 to Container 3001 (NodeJS Server)
+      - "8000:3001" # Map Host 8000 to Container 3001 (NodeJS Server - GPU Mode)
     volumes:
       - ./server:/app
       - /app/node_modules
@@ -36,9 +35,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-    restart: always
 
-    # 🔥 GPU Support Added
     deploy:
       resources:
         reservations:
@@ -46,3 +43,23 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    restart: always
+
+  # # Secondary Server (CPU only) - Port 18000
+  # server-cpu:
+  #   build:
+  #     context: ./server
+  #     dockerfile: Dockerfile
+  #   container_name: madcamp_server_cpu
+  #   ports:
+  #     - "18000:3001" # Map Host 18000 to Container 3001 (NodeJS Server - CPU Mode)
+  #   volumes:
+  #     - ./server:/app
+  #     - /app/node_modules
+  #     - ./server/uploads:/app/uploads
+  #     - ./server/output:/app/output
+  #   environment:
+  #     - NODE_ENV=production
+  #     - PORT=3001
+  #   # No GPU deploy section needed for CPU version
+  #   restart: always
