@@ -11,6 +11,10 @@ interface DeckPanelCompactProps {
   onPlayToggle: () => void;
   onSync: () => void;
   onBpmChange: (bpm: number) => void;
+  /** 현재 처리 중인지 여부 (업로드/스템분리) */
+  isProcessing?: boolean;
+  /** 처리 상태 메시지 */
+  processingStatus?: 'idle' | 'uploading' | 'stemming' | 'completed' | 'error';
 }
 
 /**
@@ -24,6 +28,8 @@ export function DeckPanelCompact({
   onPlayToggle,
   onSync,
   onBpmChange,
+  isProcessing = false,
+  processingStatus = 'idle',
 }: DeckPanelCompactProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -43,12 +49,13 @@ export function DeckPanelCompact({
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      if (isProcessing) return; // 처리 중이면 무시
       const file = e.dataTransfer.files[0];
       if (file && (file.type.startsWith("audio/") || file.name.match(/\.(mp3|wav|flac|aac|ogg)$/i))) {
         onFileLoad(file);
       }
     },
-    [onFileLoad]
+    [onFileLoad, isProcessing]
   );
 
   /**
@@ -56,10 +63,11 @@ export function DeckPanelCompact({
    */
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (isProcessing) return; // 처리 중이면 무시
       const file = e.target.files?.[0];
       if (file) onFileLoad(file);
     },
-    [onFileLoad]
+    [onFileLoad, isProcessing]
   );
 
   /**
@@ -77,6 +85,17 @@ export function DeckPanelCompact({
   const tempoUpKey = side === "A" ? "S" : ";";
   const tempoDownKey = side === "A" ? "A" : "L";
   const syncKey = side === "A" ? "[" : "]";
+  
+  // 처리 상태에 따른 텍스트
+  const getStatusText = () => {
+    switch (processingStatus) {
+      case 'uploading': return '📤 업로드 중...';
+      case 'stemming': return '🔨 스템 분리 중...';
+      case 'completed': return '✅ 준비 완료';
+      case 'error': return '❌ 에러';
+      default: return isLoaded ? deckState.trackName?.slice(0, 10) : null;
+    }
+  };
 
   return (
     <div
@@ -89,10 +108,16 @@ export function DeckPanelCompact({
         content={`오디오 파일을 ${deckLabel}에 로드합니다. MP3, WAV, FLAC, AAC, OGG 형식을 지원합니다. 파일을 드래그 앤 드롭하거나 클릭하여 선택하세요.`}
       >
         <div
-          className={`w-14 h-14 rounded-lg ${albumArtBg} border border-gray-700 flex items-center justify-center cursor-pointer mb-2 overflow-hidden`}
-          onClick={() => fileInputRef.current?.click()}
+          className={`w-14 h-14 rounded-lg ${albumArtBg} border ${isProcessing ? 'border-yellow-500 animate-pulse' : 'border-gray-700'} flex items-center justify-center cursor-pointer mb-2 overflow-hidden ${isProcessing ? 'cursor-wait' : ''}`}
+          onClick={() => !isProcessing && fileInputRef.current?.click()}
         >
-          {isLoaded ? (
+          {isProcessing ? (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-yellow-500/30 to-orange-500/30">
+              <span className="text-[7px] text-center text-yellow-300 px-1 animate-pulse">
+                {processingStatus === 'uploading' ? '📤' : '🔨'}
+              </span>
+            </div>
+          ) : isLoaded ? (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-500/30 to-pink-500/30">
               <span className="text-[8px] text-center text-gray-300 px-1 truncate">
                 {deckState.trackName?.slice(0, 10)}

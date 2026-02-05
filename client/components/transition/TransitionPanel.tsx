@@ -117,6 +117,12 @@ export function TransitionPanel() {
   // 백엔드 API 연동을 위한 fileId 상태
   const [fileIdA, setFileIdA] = useState<string | null>(null);
   const [fileIdB, setFileIdB] = useState<string | null>(null);
+  
+  // 스템 분리 진행 상태 (업로드 후 분석 완료까지 대기)
+  const [isProcessingA, setIsProcessingA] = useState(false);
+  const [isProcessingB, setIsProcessingB] = useState(false);
+  const [stemStatusA, setStemStatusA] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
+  const [stemStatusB, setStemStatusB] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
 
   // Magic Mix 결과 오디오
   const mixAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -186,17 +192,22 @@ export function TransitionPanel() {
   const handleFileLoad = useCallback(async (side: 'A' | 'B', file: File) => {
     const setter = side === 'A' ? setDeckA : setDeckB;
     const fileIdSetter = side === 'A' ? setFileIdA : setFileIdB;
+    const setIsProcessing = side === 'A' ? setIsProcessingA : setIsProcessingB;
+    const setStemStatus = side === 'A' ? setStemStatusA : setStemStatusB;
     
     console.log(`\n🎵 ===== Deck ${side} 파일 로드 시작 =====`);
     console.log(`   📁 파일명: ${file.name}`);
     console.log(`   📏 크기: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
     console.log(`   📂 타입: ${file.type}`);
     
-    // Set loading state (optional, or just partial state)
+    // 로딩 상태 설정
+    setIsProcessing(true);
+    setStemStatus('processing');
+    
     setter(prev => ({
       ...prev,
       file,
-      trackName: file.name.replace(/\.[^/.]+$/, "") + " (Uploading...)",
+      trackName: file.name.replace(/\.[^/.]+$/, "") + " (업로드 중...)",
       artistName: "Unknown Artist",
       isPlaying: false,
     }));
@@ -214,35 +225,90 @@ export function TransitionPanel() {
             fileIdSetter(response.trackId);
             console.log(`🔑 [Deck ${side}] fileId 설정 완료: ${response.trackId}`);
             
-            // Trigger stem separation in background
-            splitAudio(response.trackId).then(res => {
-                console.log(`🔨 [Deck ${side}] Stem Split Started:`, res.jobId);
-            }).catch(err => {
-                console.warn(`⚠️ [Deck ${side}] Stem Split Request Failed:`, err);
-            });
-            
-            // Server might return analysis (bpm, duration, etc.)
+            // 분석 결과 적용
             const analysis = response.analysis;
             console.log(`📊 [Deck ${side}] 분석 결과:`, analysis);
             
             setter(prev => ({
                 ...prev,
-                trackName: response.originalName || file.name.replace(/\.[^/.]+$/, ""),
+                trackName: (response.originalName || file.name.replace(/\.[^/.]+$/, "")) + " (스템 분리 중...)",
                 bpm: analysis?.bpm ? Math.round(analysis.bpm * 10) / 10 : 120,
                 originalBpm: analysis?.bpm ? Math.round(analysis.bpm * 10) / 10 : 120,
                 duration: analysis?.duration || 180,
             }));
-            console.log(`✅ [Deck ${side}] 로드 완료!`);
+            
+            // 스템 분리 요청 및 폴링
+            console.log(`🔨 [Deck ${side}] 스템 분리 요청 중...`);
+            try {
+                const splitRes = await splitAudio(response.trackId);
+                console.log(`🔨 [Deck ${side}] Stem Split Started:`, splitRes.jobId);
+                
+                // 스템 분리 완료까지 폴링 (최대 5분)
+                const maxPolls = 60; // 5초 간격으로 60회 = 5분
+                let pollCount = 0;
+                
+                const pollInterval = setInterval(async () => {
+                    try {
+                        pollCount++;
+                        const { getMixStatus } = await import("@/lib/api/transition");
+                        const statusData = await getMixStatus(splitRes.jobId);
+                        
+                        console.log(`🔄 [Deck ${side}] 스템 분리 상태 (${pollCount}/${maxPolls}):`, statusData.status);
+                        
+                        if (statusData.status === 'completed') {
+                            clearInterval(pollInterval);
+                            setStemStatus('completed');
+                            setIsProcessing(false);
+                            setter(prev => ({
+                                ...prev,
+                                trackName: response.originalName || file.name.replace(/\.[^/.]+$/, ""),
+                            }));
+                            console.log(`✅ [Deck ${side}] 스템 분리 완료!`);
+                        } else if (statusData.status === 'failed') {
+                            clearInterval(pollInterval);
+                            setStemStatus('error');
+                            setIsProcessing(false);
+                            console.error(`❌ [Deck ${side}] 스템 분리 실패:`, statusData.error);
+                        } else if (pollCount >= maxPolls) {
+                            clearInterval(pollInterval);
+                            // 타임아웃 되어도 일단 완료 처리 (Magic Mix는 가능)
+                            setStemStatus('completed');
+                            setIsProcessing(false);
+                            setter(prev => ({
+                                ...prev,
+                                trackName: response.originalName || file.name.replace(/\.[^/.]+$/, ""),
+                            }));
+                            console.warn(`⚠️ [Deck ${side}] 스템 분리 타임아웃 (계속 진행)`);
+                        }
+                    } catch (pollErr) {
+                        console.warn(`⚠️ [Deck ${side}] 폴링 에러:`, pollErr);
+                    }
+                }, 5000); // 5초 간격
+                
+            } catch (splitErr: any) {
+                console.warn(`⚠️ [Deck ${side}] Stem Split Request Failed:`, splitErr);
+                // 스템 분리 실패해도 업로드는 성공이므로 완료 처리
+                setStemStatus('completed');
+                setIsProcessing(false);
+                setter(prev => ({
+                    ...prev,
+                    trackName: response.originalName || file.name.replace(/\.[^/.]+$/, ""),
+                }));
+            }
+            
         } else {
             console.error(`❌ [Deck ${side}] 업로드 실패:`, response.message);
-            setter(prev => ({ ...prev, trackName: prev.trackName?.replace(" (Uploading...)", " (Error)") }));
+            setStemStatus('error');
+            setIsProcessing(false);
+            setter(prev => ({ ...prev, trackName: prev.trackName?.replace(" (업로드 중...)", " (에러)") }));
             alert(`Upload failed: ${response.message}`);
         }
     } catch (e: any) {
         console.error(`❌ [Deck ${side}] File load error:`, e);
         console.error(`   에러 메시지: ${e.message}`);
-        console.error(`   스택 트레이스:`, e.stack);
-        setter(prev => ({ ...prev, trackName: prev.trackName?.replace(" (Uploading...)", " (Error)") }));
+        setStemStatus('error');
+        setIsProcessing(false);
+        setter(prev => ({ ...prev, trackName: prev.trackName?.replace(" (업로드 중...)", " (에러)") }));
         alert(`Upload error: ${e.message}`);
     }
   }, []);
@@ -558,6 +624,8 @@ export function TransitionPanel() {
             onPlayToggle={() => setDeckA(prev => ({ ...prev, isPlaying: !prev.isPlaying }))}
             onSync={() => handleSync('A')}
             onBpmChange={(bpm) => handleBpmChange('A', bpm)}
+            isProcessing={isProcessingA}
+            processingStatus={stemStatusA === 'processing' ? (fileIdA ? 'stemming' : 'uploading') : stemStatusA}
           />
         </div>
 
@@ -582,6 +650,8 @@ export function TransitionPanel() {
             onPlayToggle={() => setDeckB(prev => ({ ...prev, isPlaying: !prev.isPlaying }))}
             onSync={() => handleSync('B')}
             onBpmChange={(bpm) => handleBpmChange('B', bpm)}
+            isProcessing={isProcessingB}
+            processingStatus={stemStatusB === 'processing' ? (fileIdB ? 'stemming' : 'uploading') : stemStatusB}
           />
         </div>
       </div>
@@ -642,14 +712,18 @@ export function TransitionPanel() {
         <TooltipWrapper content="Magic Mix. AI가 두 트랙을 분석하여 최적의 트랜지션 포인트를 찾고 부드러운 믹스를 자동 생성합니다.">
           <button
             onClick={handleMagicMix}
-            disabled={isMixProcessing}
+            disabled={isMixProcessing || isProcessingA || isProcessingB}
             className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${
-              isMixProcessing
+              isMixProcessing || isProcessingA || isProcessingB
                 ? 'bg-gray-600 text-gray-300 cursor-wait'
                 : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 shadow-lg shadow-purple-600/30'
             }`}
           >
-            {isMixProcessing ? `🔄 처리중... ${mixProgress}%` : '✨ Magic Mix'}
+            {isMixProcessing 
+              ? `🔄 믹싱 중... ${mixProgress}%` 
+              : isProcessingA || isProcessingB
+                ? `⏳ 스템 분리 대기중...`
+                : '✨ Magic Mix'}
           </button>
         </TooltipWrapper>
 
