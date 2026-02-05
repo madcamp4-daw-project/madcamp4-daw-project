@@ -17,13 +17,19 @@ export function Timeline({ tracks, currentTime, zoom, bpm }: TimelineProps) {
   const playheadPosition = (currentTime / 60) * bpm * pixelsPerBeat;
 
   // Generate waveform-like pattern for audio clips
-  const generateWaveform = (seed: number) => {
+  const generateWaveform = (seed: string | number) => {
+    let numSeed = 0;
+    if (typeof seed === 'string') {
+        for(let i=0; i<seed.length; i++) numSeed += seed.charCodeAt(i);
+    } else {
+        numSeed = seed as number;
+    }
     const points: number[] = [];
     for (let i = 0; i < 100; i++) {
       const val =
-        Math.sin(i * 0.3 + seed) * 0.3 +
-        Math.sin(i * 0.7 + seed * 2) * 0.2 +
-        Math.sin(i * 1.5 + seed * 3) * 0.15 +
+        Math.sin(i * 0.3 + numSeed) * 0.3 +
+        Math.sin(i * 0.7 + numSeed * 2) * 0.2 +
+        Math.sin(i * 1.5 + numSeed * 3) * 0.15 +
         0.5;
       points.push(Math.max(0.1, Math.min(0.9, val)));
     }

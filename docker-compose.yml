@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: madcamp_client
     ports:
-      - "3000:3000"
+      - "8080:3000"
     environment:
       - NODE_ENV=production
       # Note: NEXT_PUBLIC_ variables are typically baked in at build time or handled via runtime config.

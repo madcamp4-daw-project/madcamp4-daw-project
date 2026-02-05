@@ -22,6 +22,41 @@ export interface MixerTrack {
   armed: boolean;            // 녹음 대기 상태
   audioUrl?: string;         // 오디오 파일 URL
   sourceType: 'file' | 'stem' | 'instrument' | 'aux';
+  // Compatibility with DAW Track
+  type?: 'audio' | 'midi';
+  clips?: any[];
+}
+
+export interface ProChannelState {
+  eq: {
+    enabled: boolean;
+    bands: { frequency: number; gain: number; q: number; type: string; enabled: boolean }[];
+  };
+  compressor: {
+    enabled: boolean;
+    threshold: number;
+    ratio: number;
+    attack: number;
+    release: number;
+    makeup: number;
+  };
+  tape: {
+    enabled: boolean;
+    drive: number;
+    warmth: number;
+    speed: string;
+  };
+  console: {
+    enabled: boolean;
+    input: number;
+    drive: number;
+    type: string;
+  };
+  tube: {
+    enabled: boolean;
+    drive: number;
+    lowCut: boolean;
+  };
 }
 
 /**
@@ -32,6 +67,11 @@ interface MixerState {
   tracks: MixerTrack[];
   masterVolume: number;      // 마스터 볼륨 (dB)
   selectedTrackId: string | null;
+  proChannel: ProChannelState;
+  
+  // 액션 - ProChannel
+  setProChannelState: (module: keyof ProChannelState, newState: any) => void;
+
   
   // 액션 - 트랙 관리
   addTrack: (track: Omit<MixerTrack, 'id'>) => string;  // 트랙 추가, ID 반환
@@ -58,6 +98,10 @@ interface MixerState {
   resetMixer: () => void;
   clearAllMutes: () => void;
   clearAllSolos: () => void;
+  
+  // API Sync
+  loadFromServer: () => Promise<void>;
+  saveToServer: () => Promise<void>;
 }
 
 /**
@@ -68,10 +112,28 @@ const generateId = () => `track-${Date.now()}-${Math.random().toString(36).subst
 /**
  * 초기 상태
  */
+const initialProChannelState: ProChannelState = {
+  eq: {
+    enabled: true,
+    bands: [
+      { frequency: 80, gain: 0, q: 1, type: "lowshelf", enabled: true },
+      { frequency: 250, gain: 0, q: 1.4, type: "peaking", enabled: true },
+      { frequency: 1000, gain: 0, q: 1.4, type: "peaking", enabled: true },
+      { frequency: 4000, gain: 0, q: 1.4, type: "peaking", enabled: true },
+      { frequency: 12000, gain: 0, q: 1, type: "highshelf", enabled: true },
+    ]
+  },
+  compressor: { enabled: true, threshold: -20, ratio: 4, attack: 10, release: 100, makeup: 0 },
+  tape: { enabled: true, drive: 30, warmth: 50, speed: "15" },
+  console: { enabled: true, input: 0, drive: 40, type: "ssl" },
+  tube: { enabled: false, drive: 25, lowCut: false },
+};
+
 const initialState = {
   tracks: [],
   masterVolume: 0,
   selectedTrackId: null,
+  proChannel: initialProChannelState,
 };
 
 /**
@@ -275,6 +337,16 @@ export const useMixerStore = create<MixerState>()(
         selectTrack: (id) => {
           set({ selectedTrackId: id }, false, 'selectTrack');
         },
+
+        // ===== ProChannel =====
+        setProChannelState: (module, newState) => {
+            set((state) => ({
+                proChannel: {
+                    ...state.proChannel,
+                    [module]: { ...state.proChannel[module], ...newState }
+                }
+            }), false, 'setProChannelState');
+        },
         
         // ===== 유틸리티 =====
         
@@ -310,12 +382,53 @@ export const useMixerStore = create<MixerState>()(
             'clearAllSolos'
           );
         },
+
+        // ===== API Sync =====
+        loadFromServer: async () => {
+          try {
+            const response = await fetch('/api/project');
+             if (!response.ok) throw new Error('Failed to fetch project');
+             const data = await response.json();
+             if (data.success && data.project && data.project.mixer) {
+                 const mixerState = data.project.mixer;
+                 set({
+                     masterVolume: mixerState.masterVolume || 0,
+                     tracks: mixerState.tracks || [],
+                     proChannel: data.project.proChannel || initialProChannelState,
+                 }, false, 'loadFromServer');
+             }
+          } catch (e) {
+              console.error(e);
+          }
+        },
+
+        saveToServer: async () => {
+             const state = get();
+             const projectData = {
+                 mixer: {
+                     masterVolume: state.masterVolume,
+                     tracks: state.tracks
+                 },
+                  proChannel: state.proChannel
+             };
+             
+             try {
+                await fetch('/api/project', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(projectData)
+                });
+             } catch (e) {
+                 console.error(e);
+             }
+        },
       }),
       {
         name: 'mixer-storage',
         partialize: (state) => ({
           // 영속화할 상태만 선택
           masterVolume: state.masterVolume,
+          proChannel: state.proChannel,
         }),
       }
     ),

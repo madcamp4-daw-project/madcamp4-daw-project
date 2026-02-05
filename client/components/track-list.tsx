@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 export interface Track {
-  id: number;
+  id: string | number;
   name: string;
   type: "audio" | "midi" | "bus" | "master";
   color: string;
@@ -27,7 +27,7 @@ export interface Track {
 }
 
 export interface Clip {
-  id: number;
+  id: string | number;
   name: string;
   start: number;
   duration: number;
@@ -36,11 +36,11 @@ export interface Clip {
 
 interface TrackListProps {
   tracks: Track[];
-  selectedTrackId: number | null;
-  onSelectTrack: (id: number) => void;
-  onToggleMute: (id: number) => void;
-  onToggleSolo: (id: number) => void;
-  onToggleArm: (id: number) => void;
+  selectedTrackId: string | number | null;
+  onSelectTrack: (id: string | number) => void;
+  onToggleMute: (id: string | number) => void;
+  onToggleSolo: (id: string | number) => void;
+  onToggleArm: (id: string | number) => void;
 }
 
 export function TrackList({

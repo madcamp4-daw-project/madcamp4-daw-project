@@ -10,12 +10,12 @@ import useMixerStore from "@/lib/stores/useMixerStore";
 
 interface MixerProps {
   tracks: Track[];
-  onVolumeChange: (id: number, volume: number) => void;
-  onPanChange: (id: number, pan: number) => void;
-  onToggleMute: (id: number) => void;
-  onToggleSolo: (id: number) => void;
+  onVolumeChange: (id: string | number, volume: number) => void;
+  onPanChange: (id: string | number, pan: number) => void;
+  onToggleMute: (id: string | number) => void;
+  onToggleSolo: (id: string | number) => void;
   onAddTrack?: () => void;
-  onRemoveTrack?: (id: number) => void;
+  onRemoveTrack?: (id: string | number) => void;
 }
 
 /**
@@ -31,8 +31,8 @@ export function Mixer({
   onAddTrack,
   onRemoveTrack,
 }: MixerProps) {
-  const [selectedChannel, setSelectedChannel] = useState<number | null>(null);
-  const [meterLevels, setMeterLevels] = useState<Record<number, number>>({});
+  const [selectedChannel, setSelectedChannel] = useState<string | number | null>(null);
+  const [meterLevels, setMeterLevels] = useState<Record<string | number, number>>({});
   const engineRef = useRef<MixerEngine | null>(null);
   const animationRef = useRef<number>(0);
 
@@ -48,13 +48,13 @@ export function Mixer({
   useEffect(() => {
     const updateMeters = () => {
       if (engineRef.current) {
-        const levels: Record<number, number> = {};
+        const levels: Record<string | number, number> = {};
         tracks.forEach((track) => {
           // 엔진에서 실제 레벨 가져오기 (트랙 ID → 엔진 트랙 매핑)
           const level = engineRef.current!.getMeterLevel(`track-${track.id}`);
           // 스테레오 레벨이면 평균값 사용
-          if (level === null) {
-            levels[track.id] = Math.random() * 0.5 + 0.2;
+          if (level === null || level === undefined) {
+            levels[track.id] = 0;
           } else if (typeof level === "number") {
             levels[track.id] = level;
           } else {
@@ -72,7 +72,7 @@ export function Mixer({
 
   // 볼륨 변경 핸들러 (엔진 연동)
   const handleVolumeChange = useCallback(
-    (trackId: number, volume: number) => {
+    (trackId: string | number, volume: number) => {
       engineRef.current?.setVolume(`track-${trackId}`, volume);
       onVolumeChange(trackId, volume);
     },
@@ -81,7 +81,7 @@ export function Mixer({
 
   // Pan 변경 핸들러 (엔진 연동)
   const handlePanChange = useCallback(
-    (trackId: number, pan: number) => {
+    (trackId: string | number, pan: number) => {
       engineRef.current?.setPan(`track-${trackId}`, pan);
       onPanChange(trackId, pan);
     },
@@ -90,7 +90,7 @@ export function Mixer({
 
   // Mute 토글 핸들러 (엔진 연동)
   const handleToggleMute = useCallback(
-    (trackId: number) => {
+    (trackId: string | number) => {
       const track = tracks.find((t) => t.id === trackId);
       if (track) {
         engineRef.current?.setMute(`track-${trackId}`, !track.muted);
@@ -102,7 +102,7 @@ export function Mixer({
 
   // Solo 토글 핸들러 (엔진 연동)
   const handleToggleSolo = useCallback(
-    (trackId: number) => {
+    (trackId: string | number) => {
       const track = tracks.find((t) => t.id === trackId);
       if (track) {
         engineRef.current?.setSolo(`track-${trackId}`, !track.solo);
@@ -113,8 +113,8 @@ export function Mixer({
   );
 
   // 미터 레벨 가져오기
-  const getMeterLevel = (trackId: number) => {
-    return meterLevels[trackId] ?? 0.3;
+  const getMeterLevel = (trackId: string | number) => {
+    return meterLevels[trackId] ?? 0;
   };
 
   return (
@@ -252,24 +252,6 @@ export function Mixer({
                   }}
                 >
                   S
-                </Button>
-                </TooltipWrapper>
-                <TooltipWrapper content="Record Arm. 이 트랙을 녹음 대기 상태로 설정합니다.">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 w-5 p-0 text-[10px] text-red-500"
-                >
-                  R
-                </Button>
-                </TooltipWrapper>
-                <TooltipWrapper content="Write. 오토메이션 녹음 모드입니다. 페이더 움직임이 기록됩니다.">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 w-5 p-0 text-[10px] text-muted-foreground"
-                >
-                  W
                 </Button>
                 </TooltipWrapper>
               </div>

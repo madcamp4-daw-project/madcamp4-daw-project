@@ -1,8 +1,6 @@
 "use client";
 
-import React from "react"
-
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -15,7 +13,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Power, ChevronDown, ChevronUp, GripVertical } from "lucide-react";
-import { getProChannelEngine, ProChannelEngine } from "@/lib/audio/ProChannelEngine";
+import { getProChannelEngine } from "@/lib/audio/ProChannelEngine";
+import useMixerStore from "@/lib/stores/useMixerStore";
 
 interface ModuleProps {
   title: string;
@@ -72,34 +71,34 @@ function Module({ title, enabled, onToggle, children, color = "#f97316" }: Modul
   );
 }
 
-interface EQBand {
-  frequency: number;
-  gain: number;
-  q: number;
-  type: "lowshelf" | "highshelf" | "peaking" | "lowpass" | "highpass";
-  enabled: boolean;
-}
-
 /**
- * EQ 모듈 - ProChannelEngine과 실시간 연동
- * Low/Mid/High 밴드의 게인을 조절하여 주파수 특성을 변경
+ * EQ 모듈 - 전역 스토어 연동
  */
 function EQModule() {
-  const [enabled, setEnabled] = useState(true);
-  const [bands, setBands] = useState<EQBand[]>([
-    { frequency: 80, gain: 0, q: 1, type: "lowshelf", enabled: true },
-    { frequency: 250, gain: 0, q: 1.4, type: "peaking", enabled: true },
-    { frequency: 1000, gain: 0, q: 1.4, type: "peaking", enabled: true },
-    { frequency: 4000, gain: 0, q: 1.4, type: "peaking", enabled: true },
-    { frequency: 12000, gain: 0, q: 1, type: "highshelf", enabled: true },
-  ]);
+  const eqState = useMixerStore(state => state.proChannel?.eq);
+  const setProChannelState = useMixerStore(state => state.setProChannelState);
+  const saveToServer = useMixerStore(state => state.saveToServer);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Fallback defaults if store is not yet hydated perfectly
+  const bands = eqState?.bands || [];
+  const enabled = eqState?.enabled ?? true;
+
+  const updateState = (updates: any) => {
+      setProChannelState('eq', { ...eqState, ...updates });
+      saveToServer();
+  };
+
+  const updateBand = (index: number, updates: any) => {
+     const newBands = bands.map((b, i) => i === index ? { ...b, ...updates } : b);
+     updateState({ bands: newBands });
+  };
 
   // ProChannelEngine에 EQ 설정 동기화
   useEffect(() => {
+    if (!bands.length) return;
     try {
       const engine = getProChannelEngine();
-      // 5밴드 EQ를 3밴드(low/mid/high)로 매핑
       engine.setEQ({
         low: bands[0].gain,   // 80Hz lowshelf
         mid: bands[2].gain,   // 1kHz peaking
@@ -157,6 +156,8 @@ function EQModule() {
       ctx.fillText(f >= 1000 ? `${f / 1000}k` : `${f}`, x + 2, height - 4);
     });
 
+    if (!eqState) return;
+
     // Draw EQ curve
     ctx.strokeStyle = "#f97316";
     ctx.lineWidth = 2;
@@ -210,14 +211,12 @@ function EQModule() {
       ctx.font = "bold 8px sans-serif";
       ctx.fillText(`${i + 1}`, x - 3, y + 3);
     });
-  }, [bands]);
+  }, [bands, eqState]);
 
-  const updateBand = (index: number, updates: Partial<EQBand>) => {
-    setBands(bands.map((b, i) => (i === index ? { ...b, ...updates } : b)));
-  };
+  if (!eqState) return <div>Loading EQ...</div>;
 
   return (
-    <Module title="QuadCurve EQ" enabled={enabled} onToggle={() => setEnabled(!enabled)} color="#f97316">
+    <Module title="QuadCurve EQ" enabled={enabled} onToggle={() => updateState({ enabled: !enabled })} color="#f97316">
       <canvas ref={canvasRef} width={300} height={120} className="rounded mb-3" />
       <div className="space-y-2">
         {bands.map((band, i) => (
@@ -252,34 +251,36 @@ function EQModule() {
 }
 
 /**
- * 컴프레서 모듈 - ProChannelEngine과 실시간 연동
- * Threshold/Ratio/Attack/Release 파라미터로 다이나믹 레인지 제어
+ * 컴프레서 모듈
  */
 function CompressorModule() {
-  const [enabled, setEnabled] = useState(true);
-  const [threshold, setThreshold] = useState(-20);
-  const [ratio, setRatio] = useState(4);
-  const [attack, setAttack] = useState(10);
-  const [release, setRelease] = useState(100);
-  const [makeup, setMakeup] = useState(0);
+  const comp = useMixerStore(state => state.proChannel?.compressor);
+  const setProChannelState = useMixerStore(state => state.setProChannelState);
+  const saveToServer = useMixerStore(state => state.saveToServer);
   const [gainReduction, setGainReduction] = useState(-6);
 
-  // ProChannelEngine에 컴프레서 설정 동기화
+  const updateState = (updates: any) => {
+      setProChannelState('compressor', { ...comp, ...updates });
+      saveToServer();
+  };
+
+  const { enabled, threshold, ratio, attack, release, makeup } = comp || {};
+
   useEffect(() => {
+    if (!comp) return;
     try {
       const engine = getProChannelEngine();
       engine.setCompressor({
-        threshold: threshold,
-        ratio: ratio,
-        attack: attack / 1000,  // ms → s 변환
-        release: release / 1000, // ms → s 변환
+        threshold,
+        ratio,
+        attack: attack / 1000,
+        release: release / 1000,
       });
     } catch (e) {
       console.warn('Compressor 엔진 연결 실패:', e);
     }
-  }, [threshold, ratio, attack, release]);
+  }, [threshold, ratio, attack, release, comp]);
 
-  // 모듈 바이패스 동기화
   useEffect(() => {
     try {
       const engine = getProChannelEngine();
@@ -289,17 +290,15 @@ function CompressorModule() {
     }
   }, [enabled]);
 
-  // Simulate gain reduction meter
   useEffect(() => {
-    const interval = setInterval(() => {
-      setGainReduction(-Math.random() * 12);
-    }, 100);
+    const interval = setInterval(() => setGainReduction(-Math.random() * 12), 100);
     return () => clearInterval(interval);
   }, []);
 
+  if (!comp) return <div>Loading Compressor...</div>;
+
   return (
-    <Module title="PC76 Compressor" enabled={enabled} onToggle={() => setEnabled(!enabled)} color="#3b82f6">
-      {/* Gain Reduction Meter */}
+    <Module title="PC76 Compressor" enabled={enabled} onToggle={() => updateState({ enabled: !enabled })} color="#3b82f6">
       <div className="mb-3">
         <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
           <span>GR</span>
@@ -314,81 +313,51 @@ function CompressorModule() {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <TooltipWrapper content="컴프레서가 작동하기 시작하는 레벨입니다. 신호가 이 레벨을 초과하면 압축이 적용됩니다.">
+        <TooltipWrapper content="컴프레서가 작동하기 시작하는 레벨입니다.">
         <div className="space-y-1">
           <div className="flex justify-between text-[10px]">
             <span className="text-muted-foreground">Threshold</span>
             <span className="text-foreground">{threshold}dB</span>
           </div>
-          <Slider
-            value={[threshold]}
-            onValueChange={([v]) => setThreshold(v)}
-            min={-60}
-            max={0}
-            step={1}
-          />
+          <Slider value={[threshold]} onValueChange={([v]) => updateState({ threshold: v })} min={-60} max={0} step={1} />
         </div>
         </TooltipWrapper>
-        <TooltipWrapper content="압축 비율입니다. 4:1 = 입력이 4dB 증가할 때 출력은 1dB만 증가합니다.">
+        <TooltipWrapper content="압축 비율입니다.">
         <div className="space-y-1">
           <div className="flex justify-between text-[10px]">
             <span className="text-muted-foreground">Ratio</span>
             <span className="text-foreground">{ratio}:1</span>
           </div>
-          <Slider
-            value={[ratio]}
-            onValueChange={([v]) => setRatio(v)}
-            min={1}
-            max={20}
-            step={0.5}
-          />
+          <Slider value={[ratio]} onValueChange={([v]) => updateState({ ratio: v })} min={1} max={20} step={0.5} />
         </div>
         </TooltipWrapper>
-        <TooltipWrapper content="컴프레서가 반응하는 속도입니다. 짧으면 빠른 트랜지언트를 잡고, 길면 펀치감을 유지합니다.">
+        <TooltipWrapper content="Attack time">
         <div className="space-y-1">
           <div className="flex justify-between text-[10px]">
             <span className="text-muted-foreground">Attack</span>
             <span className="text-foreground">{attack}ms</span>
           </div>
-          <Slider
-            value={[attack]}
-            onValueChange={([v]) => setAttack(v)}
-            min={0.1}
-            max={100}
-            step={0.1}
-          />
+          <Slider value={[attack]} onValueChange={([v]) => updateState({ attack: v })} min={0.1} max={100} step={0.1} />
         </div>
         </TooltipWrapper>
-        <TooltipWrapper content="압축이 해제되는 속도입니다. 너무 짧으면 펌핑 현상이 발생할 수 있습니다.">
+        <TooltipWrapper content="Release time">
         <div className="space-y-1">
           <div className="flex justify-between text-[10px]">
             <span className="text-muted-foreground">Release</span>
             <span className="text-foreground">{release}ms</span>
           </div>
-          <Slider
-            value={[release]}
-            onValueChange={([v]) => setRelease(v)}
-            min={10}
-            max={1000}
-            step={10}
-          />
+          <Slider value={[release]} onValueChange={([v]) => updateState({ release: v })} min={10} max={1000} step={10} />
         </div>
         </TooltipWrapper>
       </div>
 
-      <TooltipWrapper content="압축으로 줄어든 음량을 보상합니다. 압축 후 전체 레벨을 올리는 데 사용합니다.">
+      <TooltipWrapper content="Makeup Gain">
       <div className="mt-3 space-y-1">
         <div className="flex justify-between text-[10px]">
           <span className="text-muted-foreground">Makeup Gain</span>
           <span className="text-foreground">{makeup > 0 ? "+" : ""}{makeup}dB</span>
         </div>
-        <Slider
-          value={[makeup]}
-          onValueChange={([v]) => setMakeup(v)}
-          min={0}
-          max={24}
-          step={0.5}
-        />
+        <Slider value={[makeup]} onValueChange={([v]) => updateState({ makeup: v })} min={0} max={24} step={0.5} />
       </div>
       </TooltipWrapper>
     </Module>
@@ -396,26 +365,30 @@ function CompressorModule() {
 }
 
 /**
- * 테이프 새츄레이션 모듈 - ProChannelEngine과 실시간 연동
- * 따뜻한 아날로그 테이프 특성 시뮬레이션
+ * 테이프 새츄레이션 모듈
  */
 function TapeSaturationModule() {
-  const [enabled, setEnabled] = useState(true);
-  const [drive, setDrive] = useState(30);
-  const [warmth, setWarmth] = useState(50);
-  const [tapeSpeed, setTapeSpeed] = useState("15");
+  const tape = useMixerStore(state => state.proChannel?.tape);
+  const setProChannelState = useMixerStore(state => state.setProChannelState);
+  const saveToServer = useMixerStore(state => state.saveToServer);
 
-  // ProChannelEngine에 테이프 새츄레이션 설정 동기화
+  const updateState = (updates: any) => {
+      setProChannelState('tape', { ...tape, ...updates });
+      saveToServer();
+  };
+
+  const { enabled, drive, warmth, speed } = tape || {};
+
   useEffect(() => {
+    if (!tape) return;
     try {
       const engine = getProChannelEngine();
       engine.setSaturation(drive, 'tape');
     } catch (e) {
       console.warn('Tape Saturation 엔진 연결 실패:', e);
     }
-  }, [drive]);
+  }, [drive, tape]);
 
-  // 모듈 바이패스 동기화
   useEffect(() => {
     try {
       const engine = getProChannelEngine();
@@ -425,11 +398,13 @@ function TapeSaturationModule() {
     }
   }, [enabled]);
 
+  if (!tape) return <div>Loading Tape...</div>;
+
   return (
-    <Module title="Tape Emulator" enabled={enabled} onToggle={() => setEnabled(!enabled)} color="#eab308">
+    <Module title="Tape Emulator" enabled={enabled} onToggle={() => updateState({ enabled: !enabled })} color="#eab308">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-[10px] text-muted-foreground">Speed</span>
-        <Select value={tapeSpeed} onValueChange={setTapeSpeed}>
+        <Select value={speed} onValueChange={(v) => updateState({ speed: v })}>
           <SelectTrigger className="h-6 text-xs flex-1 bg-[#252525] border-border">
             <SelectValue />
           </SelectTrigger>
@@ -442,34 +417,22 @@ function TapeSaturationModule() {
       </div>
 
       <div className="space-y-3">
-        <TooltipWrapper content="테이프 새췤레이션 양입니다. 높을수록 따뜻하고 아날로그적인 왔곡이 추가됩니다.">
+        <TooltipWrapper content="Drive">
         <div className="space-y-1">
           <div className="flex justify-between text-[10px]">
             <span className="text-muted-foreground">Drive</span>
             <span className="text-foreground">{drive}%</span>
           </div>
-          <Slider
-            value={[drive]}
-            onValueChange={([v]) => setDrive(v)}
-            min={0}
-            max={100}
-            step={1}
-          />
+          <Slider value={[drive]} onValueChange={([v]) => updateState({ drive: v })} min={0} max={100} step={1} />
         </div>
         </TooltipWrapper>
-        <TooltipWrapper content="테이프의 고역 롤오프와 저역 부스트 정도입니다. 빈티지한 톤을 만듭니다.">
+        <TooltipWrapper content="Warmth">
         <div className="space-y-1">
           <div className="flex justify-between text-[10px]">
             <span className="text-muted-foreground">Warmth</span>
             <span className="text-foreground">{warmth}%</span>
           </div>
-          <Slider
-            value={[warmth]}
-            onValueChange={([v]) => setWarmth(v)}
-            min={0}
-            max={100}
-            step={1}
-          />
+          <Slider value={[warmth]} onValueChange={([v]) => updateState({ warmth: v })} min={0} max={100} step={1} />
         </div>
         </TooltipWrapper>
       </div>
@@ -478,26 +441,30 @@ function TapeSaturationModule() {
 }
 
 /**
- * 콘솔 새츄레이션 모듈 - ProChannelEngine과 실시간 연동
- * SSL/Neve/API 콘솔 특성 시뮬레이션
+ * 콘솔 새츄레이션 모듈
  */
 function ConsoleSaturationModule() {
-  const [enabled, setEnabled] = useState(true);
-  const [input, setInput] = useState(0);
-  const [drive, setDrive] = useState(40);
-  const [type, setType] = useState("ssl");
+  const consoleState = useMixerStore(state => state.proChannel?.console);
+  const setProChannelState = useMixerStore(state => state.setProChannelState);
+  const saveToServer = useMixerStore(state => state.saveToServer);
 
-  // ProChannelEngine에 콘솔 새츄레이션 설정 동기화
+  const updateState = (updates: any) => {
+      setProChannelState('console', { ...consoleState, ...updates });
+      saveToServer();
+  };
+
+  const { enabled, input, drive, type } = consoleState || {};
+
   useEffect(() => {
+    if (!consoleState) return;
     try {
       const engine = getProChannelEngine();
       engine.setSaturation(drive, 'console');
     } catch (e) {
       console.warn('Console Saturation 엔진 연결 실패:', e);
     }
-  }, [drive]);
+  }, [drive, consoleState]);
 
-  // 모듈 바이패스 동기화
   useEffect(() => {
     try {
       const engine = getProChannelEngine();
@@ -507,12 +474,14 @@ function ConsoleSaturationModule() {
     }
   }, [enabled]);
 
+  if (!consoleState) return <div>Loading Console...</div>;
+
   return (
-    <Module title="Console Emulator" enabled={enabled} onToggle={() => setEnabled(!enabled)} color="#22c55e">
-      <TooltipWrapper content="에뮬레이션할 콘솔 유형입니다. SSL=펀치, Neve=따뜻함, API=색감.">
+    <Module title="Console Emulator" enabled={enabled} onToggle={() => updateState({ enabled: !enabled })} color="#22c55e">
+      <TooltipWrapper content="Console Types">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-[10px] text-muted-foreground">Type</span>
-        <Select value={type} onValueChange={setType}>
+        <Select value={type} onValueChange={(v) => updateState({ type: v })}>
           <SelectTrigger className="h-6 text-xs flex-1 bg-[#252525] border-border">
             <SelectValue />
           </SelectTrigger>
@@ -526,34 +495,22 @@ function ConsoleSaturationModule() {
       </TooltipWrapper>
 
       <div className="space-y-3">
-        <TooltipWrapper content="콘솔에 입력되는 신호 레벨입니다. 높일수록 더 많은 새췤레이션이 적용됩니다.">
+        <TooltipWrapper content="Input Level">
         <div className="space-y-1">
           <div className="flex justify-between text-[10px]">
             <span className="text-muted-foreground">Input</span>
             <span className="text-foreground">{input > 0 ? "+" : ""}{input}dB</span>
           </div>
-          <Slider
-            value={[input]}
-            onValueChange={([v]) => setInput(v)}
-            min={-12}
-            max={12}
-            step={0.5}
-          />
+          <Slider value={[input]} onValueChange={([v]) => updateState({ input: v })} min={-12} max={12} step={0.5} />
         </div>
         </TooltipWrapper>
-        <TooltipWrapper content="콘솔 새췤레이션 양입니다. 높을수록 더 품부한 사운드가 됩니다.">
+        <TooltipWrapper content="Drive">
         <div className="space-y-1">
           <div className="flex justify-between text-[10px]">
             <span className="text-muted-foreground">Drive</span>
             <span className="text-foreground">{drive}%</span>
           </div>
-          <Slider
-            value={[drive]}
-            onValueChange={([v]) => setDrive(v)}
-            min={0}
-            max={100}
-            step={1}
-          />
+          <Slider value={[drive]} onValueChange={([v]) => updateState({ drive: v })} min={0} max={100} step={1} />
         </div>
         </TooltipWrapper>
       </div>
@@ -562,25 +519,30 @@ function ConsoleSaturationModule() {
 }
 
 /**
- * 튜브 모듈 - ProChannelEngine과 실시간 연동
- * 진공관 특성의 따뜻한 왜곡 시뮬레이션
+ * 튜브 모듈
  */
 function TubeModule() {
-  const [enabled, setEnabled] = useState(false);
-  const [drive, setDrive] = useState(25);
-  const [lowCut, setLowCut] = useState(false);
+  const tube = useMixerStore(state => state.proChannel?.tube);
+  const setProChannelState = useMixerStore(state => state.setProChannelState);
+  const saveToServer = useMixerStore(state => state.saveToServer);
 
-  // ProChannelEngine에 튜브 설정 동기화
+  const updateState = (updates: any) => {
+      setProChannelState('tube', { ...tube, ...updates });
+      saveToServer();
+  };
+
+  const { enabled, drive, lowCut } = tube || {};
+
   useEffect(() => {
+    if (!tube) return;
     try {
       const engine = getProChannelEngine();
       engine.setTube(drive);
     } catch (e) {
       console.warn('Tube 엔진 연결 실패:', e);
     }
-  }, [drive]);
+  }, [drive, tube]);
 
-  // 모듈 바이패스 동기화
   useEffect(() => {
     try {
       const engine = getProChannelEngine();
@@ -590,28 +552,24 @@ function TubeModule() {
     }
   }, [enabled]);
 
+  if (!tube) return <div>Loading Tube...</div>;
+
   return (
-    <Module title="Tube Saturation" enabled={enabled} onToggle={() => setEnabled(!enabled)} color="#a855f7">
+    <Module title="Tube Saturation" enabled={enabled} onToggle={() => updateState({ enabled: !enabled })} color="#a855f7">
       <div className="space-y-3">
-        <TooltipWrapper content="진공관 드라이브 양입니다. 높을수록 풍부한 하모닉스와 따뜻한 왜곡이 추가됩니다.">
+        <TooltipWrapper content="Drive">
         <div className="space-y-1">
           <div className="flex justify-between text-[10px]">
             <span className="text-muted-foreground">Drive</span>
             <span className="text-foreground">{drive}%</span>
           </div>
-          <Slider
-            value={[drive]}
-            onValueChange={([v]) => setDrive(v)}
-            min={0}
-            max={100}
-            step={1}
-          />
+          <Slider value={[drive]} onValueChange={([v]) => updateState({ drive: v })} min={0} max={100} step={1} />
         </div>
         </TooltipWrapper>
-        <TooltipWrapper content="저음역을 차단합니다. 튜브 왜곡이 저음을 흐리게 만들 때 유용합니다.">
+        <TooltipWrapper content="Low Cut">
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-muted-foreground">Low Cut</span>
-          <Switch checked={lowCut} onCheckedChange={setLowCut} />
+          <Switch checked={lowCut} onCheckedChange={(v) => updateState({ lowCut: v })} />
         </div>
         </TooltipWrapper>
       </div>

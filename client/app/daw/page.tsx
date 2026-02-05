@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Toolbar } from "@/components/toolbar";
-import { TrackList, type Track } from "@/components/track-list";
+import { TrackList } from "@/components/track-list";
 import { Timeline } from "@/components/timeline";
 import { Mixer } from "@/components/mixer";
 import { BrowserPanel } from "@/components/browser-panel";
@@ -30,128 +30,26 @@ import {
   Radio,
 } from "lucide-react";
 
-const initialTracks: Track[] = [
-  {
-    id: 1,
-    name: "MAIN GTR",
-    type: "audio",
-    color: "#3b82f6",
-    volume: -2.3,
-    pan: 0,
-    muted: false,
-    solo: false,
-    armed: false,
-    clips: [
-      { id: 1, name: "Main Guitar", start: 4, duration: 8, color: "#3b82f6" },
-      { id: 2, name: "Main Guitar 2", start: 16, duration: 12, color: "#3b82f6" },
-    ],
-  },
-  {
-    id: 2,
-    name: "CHRIS GTR",
-    type: "audio",
-    color: "#22c55e",
-    volume: -5.8,
-    pan: -20,
-    muted: false,
-    solo: false,
-    armed: false,
-    clips: [
-      { id: 3, name: "Rhythm Guitar", start: 4, duration: 16, color: "#22c55e" },
-    ],
-  },
-  {
-    id: 3,
-    name: "LOW GTR",
-    type: "audio",
-    color: "#a855f7",
-    volume: -8.2,
-    pan: 0,
-    muted: false,
-    solo: false,
-    armed: false,
-    clips: [
-      { id: 4, name: "Bass Guitar", start: 0, duration: 20, color: "#a855f7" },
-    ],
-  },
-  {
-    id: 4,
-    name: "Lead Vocal",
-    type: "audio",
-    color: "#f97316",
-    volume: -1.5,
-    pan: 0,
-    muted: false,
-    solo: false,
-    armed: true,
-    clips: [
-      { id: 5, name: "Verse 1", start: 8, duration: 8, color: "#f97316" },
-      { id: 6, name: "Chorus", start: 20, duration: 8, color: "#f97316" },
-    ],
-  },
-  {
-    id: 5,
-    name: "Lead Vocal Dub",
-    type: "audio",
-    color: "#eab308",
-    volume: -12.3,
-    pan: 30,
-    muted: false,
-    solo: false,
-    armed: false,
-    clips: [
-      { id: 7, name: "Vocal Double", start: 8, duration: 8, color: "#eab308" },
-    ],
-  },
-  {
-    id: 6,
-    name: "BG Vocal",
-    type: "audio",
-    color: "#06b6d4",
-    volume: -15.2,
-    pan: -30,
-    muted: false,
-    solo: false,
-    armed: false,
-    clips: [
-      { id: 8, name: "Harmonies", start: 20, duration: 8, color: "#06b6d4" },
-    ],
-  },
-  {
-    id: 7,
-    name: "Drums",
-    type: "audio",
-    color: "#ef4444",
-    volume: -3.0,
-    pan: 0,
-    muted: false,
-    solo: false,
-    armed: false,
-    clips: [
-      { id: 9, name: "Drum Loop", start: 0, duration: 32, color: "#ef4444" },
-    ],
-  },
-  {
-    id: 8,
-    name: "Synth Pad",
-    type: "midi",
-    color: "#ec4899",
-    volume: -10.5,
-    pan: 0,
-    muted: false,
-    solo: false,
-    armed: false,
-    clips: [
-      { id: 10, name: "Pad Layer", start: 8, duration: 24, color: "#ec4899" },
-    ],
-  },
-];
+import useMixerStore from "@/lib/stores/useMixerStore";
 
 type BottomPanelView = "mixer" | "piano" | "drums" | "vocal" | "prochannel" | "stems" | "transition" | null;
 
 export default function DAWPage() {
-  const [tracks, setTracks] = useState<Track[]>(initialTracks);
-  const [selectedTrackId, setSelectedTrackId] = useState<number | null>(1);
+  const tracks = useMixerStore((state) => state.tracks);
+  const selectedTrackId = useMixerStore((state) => state.selectedTrackId);
+  const selectTrack = useMixerStore((state) => state.selectTrack);
+  
+  const setVolume = useMixerStore((state) => state.setVolume);
+  const setPan = useMixerStore((state) => state.setPan);
+  const toggleMute = useMixerStore((state) => state.toggleMute);
+  const toggleSolo = useMixerStore((state) => state.toggleSolo);
+  const toggleArmed = useMixerStore((state) => state.toggleArmed);
+  const addTrack = useMixerStore((state) => state.addTrack);
+  const removeTrack = useMixerStore((state) => state.removeTrack);
+  
+  const loadFromServer = useMixerStore((state) => state.loadFromServer);
+  const saveToServer = useMixerStore((state) => state.saveToServer);
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [bpm, setBpm] = useState(120);
@@ -161,6 +59,15 @@ export default function DAWPage() {
   const [bottomPanel, setBottomPanel] = useState<BottomPanelView>("mixer");
   const [showBrowser, setShowBrowser] = useState(true);
   const [showLeftPanel, setShowLeftPanel] = useState(true);
+
+  // Load from server on mount
+  useEffect(() => {
+    loadFromServer().then(() => {
+        // If empty, maybe seeding? 
+        // For now, let's assume server is source of truth.
+        // If the user wants defaults, they should be in server's default state or added manually.
+    });
+  }, [loadFromServer]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -179,40 +86,34 @@ export default function DAWPage() {
     return () => clearInterval(interval);
   }, [isPlaying]);
 
-  const handleToggleMute = (id: number) => {
-    setTracks(
-      tracks.map((track) =>
-        track.id === id ? { ...track, muted: !track.muted } : track
-      )
-    );
+  // Wrap store actions with save
+  const handleToggleMute = (id: string | number) => {
+    toggleMute(String(id));
+    saveToServer();
   };
 
-  const handleToggleSolo = (id: number) => {
-    setTracks(
-      tracks.map((track) =>
-        track.id === id ? { ...track, solo: !track.solo } : track
-      )
-    );
+  const handleToggleSolo = (id: string | number) => {
+    toggleSolo(String(id));
+    saveToServer();
   };
 
-  const handleToggleArm = (id: number) => {
-    setTracks(
-      tracks.map((track) =>
-        track.id === id ? { ...track, armed: !track.armed } : track
-      )
-    );
+  const handleToggleArm = (id: string | number) => {
+    toggleArmed(String(id));
+    saveToServer();
   };
 
-  const handleVolumeChange = (id: number, volume: number) => {
-    setTracks(
-      tracks.map((track) => (track.id === id ? { ...track, volume } : track))
-    );
+  const handleVolumeChange = (id: string | number, volume: number) => {
+    setVolume(String(id), volume);
+    saveToServer();
   };
 
-  const handlePanChange = (id: number, pan: number) => {
-    setTracks(
-      tracks.map((track) => (track.id === id ? { ...track, pan } : track))
-    );
+  const handlePanChange = (id: string | number, pan: number) => {
+    setPan(String(id), pan);
+    saveToServer();
+  };
+  
+  const handleSelectTrack = (id: string | number) => {
+    selectTrack(String(id));
   };
 
   const handlePlay = () => setIsPlaying(!isPlaying);
@@ -261,12 +162,6 @@ export default function DAWPage() {
                 <Drum className="h-3 w-3 mr-1" />
                 Drums
               </TabsTrigger>
-              {/* VocalSync 탭 - 임시 비활성화
-              <TabsTrigger value="vocal" className="h-6 px-2 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <Mic2 className="h-3 w-3 mr-1" />
-                VocalSync
-              </TabsTrigger>
-              */}
               <TabsTrigger value="prochannel" className="h-6 px-2 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                 <Sliders className="h-3 w-3 mr-1" />
                 ProChannel
@@ -314,7 +209,7 @@ export default function DAWPage() {
         {/* Left FX Panel */}
         {showLeftPanel && (
           <div className="relative">
-            <LeftFxPanel selectedTrackId={selectedTrackId} />
+            <LeftFxPanel selectedTrackId={selectedTrackId ? Number(selectedTrackId.toString().replace('track-','')) || 0 : 0} />
             <Button
               variant="ghost"
               size="icon"
@@ -328,9 +223,9 @@ export default function DAWPage() {
 
         {/* Track List */}
         <TrackList
-          tracks={tracks}
+          tracks={tracks as any[]} // Type casting to satisfy mismatch if any clips are missing props
           selectedTrackId={selectedTrackId}
-          onSelectTrack={setSelectedTrackId}
+          onSelectTrack={handleSelectTrack}
           onToggleMute={handleToggleMute}
           onToggleSolo={handleToggleSolo}
           onToggleArm={handleToggleArm}
@@ -338,7 +233,7 @@ export default function DAWPage() {
 
         {/* Timeline */}
         <Timeline
-          tracks={tracks}
+          tracks={tracks as any[]}
           currentTime={currentTime}
           zoom={zoom}
           bpm={bpm}
@@ -365,11 +260,30 @@ export default function DAWPage() {
         <div className="border-t border-border">
           {bottomPanel === "mixer" && (
             <Mixer
-              tracks={tracks}
+              tracks={tracks as any[]}
               onVolumeChange={handleVolumeChange}
               onPanChange={handlePanChange}
               onToggleMute={handleToggleMute}
               onToggleSolo={handleToggleSolo}
+              onAddTrack={() => {
+                  addTrack({ 
+                      name: "New Track", 
+                      color: "#555", 
+                      volume: 0, 
+                      pan: 0, 
+                      muted: false, 
+                      solo: false, 
+                      armed: false, 
+                      sourceType: 'file',
+                      type: 'audio',
+                      clips: []
+                   });
+                   saveToServer();
+              }}
+              onRemoveTrack={(id) => {
+                  removeTrack(String(id));
+                  saveToServer();
+              }}
             />
           )}
           {bottomPanel === "piano" && (
@@ -382,13 +296,6 @@ export default function DAWPage() {
               <DrumMachine />
             </div>
           )}
-          {/* VocalSync 패널 - 임시 비활성화
-          {bottomPanel === "vocal" && (
-            <div className="max-h-[500px] overflow-auto">
-              <VocalSync />
-            </div>
-          )}
-          */}
           {bottomPanel === "prochannel" && (
             <div className="p-4 max-h-[500px] overflow-auto">
               <div className="max-w-md">

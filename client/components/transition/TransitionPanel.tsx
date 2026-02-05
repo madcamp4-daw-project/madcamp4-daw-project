@@ -242,7 +242,17 @@ export function TransitionPanel() {
       const pitchPercent = ((bpm - prev.originalBpm) / prev.originalBpm) * 100;
       return { ...prev, bpm, pitchPercent: Math.round(pitchPercent * 10) / 10 };
     });
-  }, []);
+
+    // Master Sync Logic
+    if (tempoSync) {
+        const otherSetter = side === 'A' ? setDeckB : setDeckA;
+        otherSetter(prev => {
+             // Sync other deck to this new bpm
+             const pitchPercent = ((bpm - prev.originalBpm) / prev.originalBpm) * 100;
+             return { ...prev, bpm, pitchPercent: Math.round(pitchPercent * 10) / 10 };
+        });
+    }
+  }, [tempoSync]);
 
   /**
    * SYNC 핸들러
@@ -270,18 +280,26 @@ export function TransitionPanel() {
    * Magic Mix 핸들러 - AI 자동 트랜지션 생성
    * Transition API를 호출하여 두 트랙의 최적 믹스 포인트 계산
    */
+  /**
+   * Magic Mix 핸들러 - AI 자동 트랜지션 생성
+   * Transition API를 호출하여 두 트랙의 최적 믹스 포인트 계산
+   * Polling (1초 간격)으로 상태 확인
+   */
   const [isMixProcessing, setIsMixProcessing] = useState(false);
+  const [mixProgress, setMixProgress] = useState(0);
+
   const handleMagicMix = useCallback(async () => {
-    // fileId가 없으면 파일 정보로 체크 (Mock 모드 호환)
+    // fileId가 없으면 파일 정보로 체크 (Mock/Fallback)
     const hasTrackA = fileIdA !== null || deckA.duration > 0;
     const hasTrackB = fileIdB !== null || deckB.duration > 0;
     
     if (!hasTrackA || !hasTrackB) {
-      console.warn('Magic Mix: 두 덱 모두에 트랙이 필요합니다.');
+      alert('Magic Mix: 두 덱 모두에 트랙이 필요합니다.');
       return;
     }
 
     setIsMixProcessing(true);
+    setMixProgress(0);
     console.log('Magic Mix 시작...');
 
     try {
@@ -289,35 +307,63 @@ export function TransitionPanel() {
       if (fileIdA && fileIdB) {
         console.log('[Magic Mix] 실제 API 호출 중...');
         // New Signature: sourceId, targetId, options
+        // mixType 'auto' is handled by logic we put in server side (mix_engine.py), 
+        // but client needs to pass explicit type or server treats 'blend' as default in routes/audio.js if not passed.
+        // We updated mix_engine to handle 'auto', but routes/audio.js defaults to 'blend' if missing.
+        // We will pass 'auto' as mixType to let python engine decide, unless user selected specific.
+        // But createTransitionMix helper treats options.transitionType as limited to 'blend'|'drop'.
+        // We'll update the helper or just cast it.
         const result = await createTransitionMix(
           fileIdA,
           fileIdB,
           { 
-              transitionType: 'blend', 
+              transitionType: 'blend', // TODO: Allow 'auto' in client API
               bridgeBars: 4 
-              // syncBpm, transitionDuration options depend on server support. 
-              // For now we pass what server 'blend' endpoint supports.
           }
         );
         
-        console.log('[Magic Mix] API 응답:', result);
-        
-        // 결과 오디오 재생
-        if (result.success && result.result?.mixUrl && mixAudioRef.current) {
-          // mixUrl handling:
-          // The server likely returns a relative path or a filename. 
-          // Use getStreamUrl if it helps or if createTransitionMix return type handles it.
-          // result.result.mixUrl might be filename.
-          const url = getStreamUrl(result.result.mixUrl);
-          
-          mixAudioRef.current.src = url;
-          mixAudioRef.current.play().catch(e => console.warn('믹스 오디오 재생 실패:', e));
-        } else if (result.success === false) {
-             throw new Error(result.message);
+        if (!result.success || !result.jobId) {
+             throw new Error(result.message || "Failed to start mix job");
         }
-        
-        setIsMixProcessing(false);
-        console.log('Magic Mix 완료!');
+
+        const jobId = result.jobId;
+        console.log(`[Magic Mix] Job Started: ${jobId}`);
+
+        // Polling Logic
+        const pollInterval = setInterval(async () => {
+            try {
+                // Check Status
+                // We need to import getMixStatus if not available or fetch directly
+                // It is imported in the file line 28
+                const statusData = await import("@/lib/api/transition").then(m => m.getMixStatus(jobId));
+                
+                if (statusData.status === 'completed') {
+                    clearInterval(pollInterval);
+                    setIsMixProcessing(false);
+                    setMixProgress(100);
+                    console.log('Magic Mix 완료!', statusData.result);
+
+                    if (statusData.result?.mixUrl && mixAudioRef.current) {
+                         const url = getStreamUrl(statusData.result.mixUrl);
+                         mixAudioRef.current.src = url;
+                         mixAudioRef.current.play().catch(e => console.warn('믹스 오디오 재생 실패:', e));
+                    }
+                } else if (statusData.status === 'failed') {
+                    clearInterval(pollInterval);
+                    setIsMixProcessing(false);
+                    alert(`믹싱 실패: ${statusData.error}`);
+                } else {
+                    // Processing
+                    if (statusData.progress) {
+                        setMixProgress(statusData.progress);
+                    }
+                }
+            } catch (e) {
+                console.error("Polling error", e);
+                // Don't clear interval immediately on network glitch, maybe count errors
+            }
+        }, 1000);
+
       } else {
         // Mock: 크로스페이더 자동 이동 시뮬레이션
         console.log('[Magic Mix] Mock 모드 - 크로스페이더 시뮬레이션');
@@ -333,11 +379,12 @@ export function TransitionPanel() {
           }
         }, 100);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Magic Mix 실패:', error);
       setIsMixProcessing(false);
+      alert(`오류 발생: ${error.message}`);
     }
-  }, [fileIdA, fileIdB, deckA, deckB, crossfader, beatLock]);
+  }, [fileIdA, fileIdB, deckA, deckB, crossfader]);
 
   /**
    * Beat Lock 토글 핸들러
@@ -425,18 +472,7 @@ export function TransitionPanel() {
                 TIMELINE
               </button>
             </TooltipWrapper>
-            <TooltipWrapper 
-              content="이펙트 설정 패널을 엽니다. Echo, Flanger, Phaser 등의 효과를 적용할 수 있습니다."
-            >
-              <button
-                onClick={() => setShowFX(!showFX)}
-                className={`px-2 py-1 text-[10px] uppercase tracking-wider transition-colors ${
-                  showFX ? 'text-orange-400' : 'text-gray-500 hover:text-gray-300'
-                }`}
-              >
-                FX
-              </button>
-            </TooltipWrapper>
+
           </div>
         </div>
 
@@ -473,77 +509,7 @@ export function TransitionPanel() {
         </div>
       </div>
 
-      {/* ===== FX 바 ===== */}
-      <div className="flex items-center justify-between px-3 py-1 bg-[#16162a] border-b border-[#2a2a3f] text-[10px]">
-        {/* Deck A FX */}
-        <div className="flex items-center gap-2">
-          <Select defaultValue="echo">
-            <SelectTrigger className="w-20 h-6 bg-[#1a1a2e] border-[#3a3a4f] text-[10px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="echo">Echo</SelectItem>
-              <SelectItem value="flanger">Flanger</SelectItem>
-              <SelectItem value="phaser">Phaser</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select defaultValue="holdecho">
-            <SelectTrigger className="w-24 h-6 bg-[#1a1a2e] border-[#3a3a4f] text-[10px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="holdecho">Hold Echo</SelectItem>
-              <SelectItem value="delay">Delay</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select defaultValue="flanger">
-            <SelectTrigger className="w-20 h-6 bg-[#1a1a2e] border-[#3a3a4f] text-[10px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="flanger">Flanger</SelectItem>
-              <SelectItem value="reverb">Reverb</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
 
-        {/* BEATS 셀렉터 */}
-        <div className="flex items-center gap-1">
-          <ChevronLeft className="w-3 h-3 text-gray-500" />
-          <span className="text-gray-400">BEATS</span>
-          <span className="px-2 py-0.5 bg-[#2a2a3f] rounded text-white">1</span>
-          <ChevronRight className="w-3 h-3 text-gray-500" />
-        </div>
-
-        {/* Deck B FX */}
-        <div className="flex items-center gap-2">
-          <Select defaultValue="echo">
-            <SelectTrigger className="w-20 h-6 bg-[#1a1a2e] border-[#3a3a4f] text-[10px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="echo">Echo</SelectItem>
-              <SelectItem value="flanger">Flanger</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select defaultValue="holdecho">
-            <SelectTrigger className="w-24 h-6 bg-[#1a1a2e] border-[#3a3a4f] text-[10px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="holdecho">Hold Echo</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select defaultValue="flanger">
-            <SelectTrigger className="w-20 h-6 bg-[#1a1a2e] border-[#3a3a4f] text-[10px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="flanger">Flanger</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
 
       {/* ===== 메인 DJ 영역 (100px : flex : 100px) ===== */}
       <div className="flex flex-1 overflow-hidden">
@@ -615,7 +581,17 @@ export function TransitionPanel() {
         {/* SYNC 버튼 */}
         <TooltipWrapper content="BPM Sync. Deck B의 BPM을 Deck A에 맞춥니다.">
           <button
-            onClick={() => setTempoSync(!tempoSync)}
+            onClick={() => {
+                const newSyncState = !tempoSync;
+                setTempoSync(newSyncState);
+                if (newSyncState) {
+                    // Sync immediately based on which deck is playing or default to A
+                    const targetBpm = deckA.isPlaying ? deckA.bpm : (deckB.isPlaying ? deckB.bpm : deckA.bpm);
+                    
+                    setDeckA(prev => ({ ...prev, bpm: targetBpm, pitchPercent: ((targetBpm - prev.originalBpm) / prev.originalBpm) * 100 }));
+                    setDeckB(prev => ({ ...prev, bpm: targetBpm, pitchPercent: ((targetBpm - prev.originalBpm) / prev.originalBpm) * 100 }));
+                }
+            }}
             className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${
               tempoSync
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
@@ -637,7 +613,7 @@ export function TransitionPanel() {
                 : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 shadow-lg shadow-purple-600/30'
             }`}
           >
-            {isMixProcessing ? '🔄 처리중...' : '✨ Magic Mix'}
+            {isMixProcessing ? `🔄 처리중... ${mixProgress}%` : '✨ Magic Mix'}
           </button>
         </TooltipWrapper>
 
@@ -655,19 +631,7 @@ export function TransitionPanel() {
           </button>
         </TooltipWrapper>
 
-        {/* Record 버튼 */}
-        <TooltipWrapper content="녹음 시작/정지. 현재 믹스를 녹음합니다.">
-          <button
-            onClick={() => setIsRecording(!isRecording)}
-            className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              isRecording
-                ? 'bg-red-600 text-white animate-pulse shadow-lg shadow-red-600/50'
-                : 'bg-[#2a2a3f] text-gray-400 hover:bg-[#3a3a4f] hover:text-white'
-            }`}
-          >
-            🎙️ {isRecording ? 'REC' : 'Record'}
-          </button>
-        </TooltipWrapper>
+
       </div>
 
       {/* ===== 라이브러리 패널 ===== */}
