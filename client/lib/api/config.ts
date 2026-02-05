@@ -31,7 +31,7 @@ export const API_CONFIG = {
   /**
    * 시스템 상태 체크 (Backend Health Check)
    */
-  health: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000',
+  health: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:18000',
 };
 
 // ===== 공통 유틸리티 =====

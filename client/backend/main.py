@@ -6,7 +6,7 @@ Required packages:
   pip install fastapi uvicorn demucs madmom librosa numpy soundfile pyrubberband
 
 Run:
-  uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+  uvicorn main:app --host 0.0.0.0 --port 18000 --reload
 """
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
@@ -342,4 +342,4 @@ def find_file(file_id: str) -> Optional[Path]:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=18000, reload=True)

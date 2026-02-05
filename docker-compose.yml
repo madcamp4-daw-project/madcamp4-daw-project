@@ -15,8 +15,8 @@ services:
       # We are relying on .env.local or build args matching this if strictly needed,
       # but providing them here satisfies the requirement to have them in compose.
       - NEXT_PUBLIC_USE_MOCK=false
-      - NEXT_PUBLIC_STEM_API_URL=http://localhost:8000/api/stems
-      - NEXT_PUBLIC_TRANSITION_API_URL=http://localhost:8000/api/transition
+      - NEXT_PUBLIC_STEM_API_URL=http://localhost:18000/api/stems
+      - NEXT_PUBLIC_TRANSITION_API_URL=http://localhost:18000/api/transition
     depends_on:
       - server
     restart: always
@@ -27,7 +27,7 @@ services:
       dockerfile: Dockerfile
     container_name: madcamp_server
     ports:
-      - "8000:3001" # Map Host 8000 to Container 3001 (NodeJS Server)
+      - "18000:3001" # Map Host 18000 to Container 3001 (NodeJS Server)
     volumes:
       - ./server:/app
       - /app/node_modules

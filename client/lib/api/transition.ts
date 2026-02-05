@@ -118,6 +118,6 @@ export async function getMixStatus(jobId: string): Promise<any> {
  */
 export function getStreamUrl(filename: string): string {
    if (filename.startsWith('http')) return filename;
-   return `${process.env.NEXT_PUBLIC_STATIC_HOST || 'http://localhost:8000'}/uploads/tracks/${filename}`;
+   return `${process.env.NEXT_PUBLIC_STATIC_HOST || 'http://localhost:18000'}/uploads/tracks/${filename}`;
 }
 
