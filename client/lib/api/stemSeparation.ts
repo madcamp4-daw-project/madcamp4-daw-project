@@ -144,6 +144,6 @@ export function getStemDownloadUrl(filename: string): string {
   // 예: http://localhost:18000/output/... 
   // 실제 경로는 서버 구현에 따라 다를 수 있으나, 보통 output 폴더를 static으로 염.
   // 여기서는 임시로 절대 경로 구성.
-  return `${process.env.NEXT_PUBLIC_STATIC_HOST || 'http://localhost:18000'}/output/${filename}`;
+  return `${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:18000'}/output/${filename}`;
 }
 

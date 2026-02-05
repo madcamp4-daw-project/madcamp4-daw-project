@@ -342,4 +342,4 @@ def find_file(file_id: str) -> Optional[Path]:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=18000, reload=True)
+    uvicorn.run(app, host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", 18000)), reload=True)

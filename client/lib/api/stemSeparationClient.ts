@@ -7,16 +7,7 @@ import { API_CONFIG } from './config';
 
 // Force Base URL logic here to be safe, or use config
 const getBaseUrl = () => {
-  // If env var is set, use it. Otherwise fallback.
-  // We want to target the Python server at port 18000 usually.
-  if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
-  
-  // Hard fallback for local development if env is missing
-  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-     return 'http://localhost:18000/api/sound';
-  }
-  
-  return '/api/sound';
+  return process.env.NEXT_PUBLIC_API_BASE_URL || '/api/sound';
 };
 
 /**
@@ -162,6 +153,6 @@ export async function uploadAndExtract(
  * 다운로드/스트림 URL 생성 헬퍼
  */
 export function getStemDownloadUrl(filename: string): string {
-  const staticHost = process.env.NEXT_PUBLIC_STATIC_HOST || 'http://localhost:18000';
+  const staticHost = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:18000';
   return `${staticHost}/output/${filename}`;
 }

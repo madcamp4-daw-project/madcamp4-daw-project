@@ -8,7 +8,7 @@ const fs = require('fs');
 const audioRouter = require('./routes/audio');
 
 const app = express();
-const PORT = 3001; // 프론트엔드가 3000번을 쓸 테니 백엔드는 3001번
+const PORT = process.env.PORT || 3001;
 
 // 미들웨어 설정
 app.use(cors()); // 프론트엔드와 통신을 위해 필수
