@@ -21,6 +21,11 @@ app.use((req, res, next) => {
     next();
 });
 
+// Health Check Endpoint
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // 정적 파일 제공 (업로드된 파일이나 결과물 접근용)
 // 예: http://localhost:3001/uploads/tracks/파일이름.wav
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
