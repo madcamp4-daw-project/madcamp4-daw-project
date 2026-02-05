@@ -17,20 +17,20 @@
 
 ```mermaid
 flowchart LR
-  subgraph clientApp [Client (Next.js / React)]
+  subgraph clientApp["Client (Next.js / React)"]
     NextApp["Next.js 16 (React 19)"]
     UIStack["Tailwind CSS 4 + Radix UI"]
     AudioUI["Tone.js / WaveSurfer.js UI 레이어"]
     StateLayer["Zustand + Zod + RHF"]
   end
 
-  subgraph backendNode [Server - Node.js API]
+  subgraph backendNode["Server - Node.js API"]
     NodeRuntime["Node.js (CommonJS)"]
     ExpressAPI["Express + CORS + Multer"]
     EnvMgmt["dotenv / nodemon"]
   end
 
-  subgraph backendPython [Python Audio Pipeline]
+  subgraph backendPython["Python Audio Pipeline"]
     FastAPI["FastAPI + Uvicorn"]
     StemSep["Demucs + Torch (Stem Separation)"]
     BeatBPM["Madmom (Beat/BPM)"]
@@ -39,7 +39,7 @@ flowchart LR
     PyUtils["Pydantic / Httpx / FFmpeg-Python / Numba"]
   end
 
-  subgraph infra [Infra / Deploy]
+  subgraph infra["Infra / Deploy"]
     DockerCompose["Docker Compose"]
     ClientSvc["service: client (8080->3000)"]
     ServerGpuSvc["service: server-gpu (18000->3001)"]
@@ -74,32 +74,32 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  subgraph feFramework [프레임워크]
+  subgraph feFramework["프레임워크"]
     NextCore["Next.js 16\n(App Router, TS)"]
     ReactCore["React 19"]
   end
 
-  subgraph feUI [스타일 / UI]
+  subgraph feUI["스타일 / UI"]
     Tailwind["Tailwind CSS 4\n(tailwindcss, tw-animate-css, tailwindcss-animate)"]
     RadixUI["Radix UI\n(@radix-ui/react-*)"]
     CmdkVaul["CMDK / Vaul"]
     IconsCharts["lucide-react / recharts"]
   end
 
-  subgraph feAudio [오디오 / 음악 레이어]
+  subgraph feAudio["오디오 / 음악 레이어"]
     ToneJS["tone 15.x\n(Tone.js 시퀀서/신스)"]
     TunaJS["tunajs\n(이펙트 체인)"]
     WaveSurfer["wavesurfer.js 7.x\n(파형/트랜스포트)"]
     MidiLib["@tonejs/midi\n(MIDI IO)"]
   end
 
-  subgraph feState [상태 / 데이터]
+  subgraph feState["상태 / 데이터"]
     ZustandStore["Zustand\n(전역 상태)"]
     ZodSchema["Zod\n(스키마/검증)"]
     RHF["react-hook-form\n+ @hookform/resolvers"]
   end
 
-  subgraph feMisc [기타 FE 유틸]
+  subgraph feMisc["기타 FE 유틸"]
     Themes["next-themes"]
     Toasts["sonner"]
     Dates["date-fns"]
@@ -133,7 +133,7 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-  subgraph nodeServer [Node.js 서버 (server/index.js)]
+  subgraph nodeServer["Node.js 서버 (server/index.js)"]
     NodeJS["Node.js (CommonJS)"]
     ExpressJS["Express"]
     CorsLib["CORS"]
@@ -142,20 +142,20 @@ flowchart LR
     NodemonLib["nodemon"]
   end
 
-  subgraph pyApi [Python API 레이어]
+  subgraph pyApi["Python API 레이어"]
     FastAPI["FastAPI"]
     Uvicorn["Uvicorn[standard]"]
     Multipart["python-multipart"]
   end
 
-  subgraph pyAudioCore [Python 오디오 처리]
+  subgraph pyAudioCore["Python 오디오 처리"]
     DemucsTorch["Demucs + Torch\n(Stem Separation)"]
     MadmomCore["Madmom\n(Beat/BPM 분석)"]
     LibrosaStack["Librosa / Numpy / Scipy / SoundFile / Audioread"]
     Rubberband["PyRubberBand\n(Time Stretching)"]
   end
 
-  subgraph pyUtils [Python 유틸/인프라]
+  subgraph pyUtils["Python 유틸/인프라"]
     Pydantic["Pydantic"]
     Httpx["Httpx"]
     FFmpegPy["FFmpeg-Python"]
