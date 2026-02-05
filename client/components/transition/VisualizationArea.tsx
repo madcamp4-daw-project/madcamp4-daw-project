@@ -15,16 +15,6 @@ interface VisualizationAreaProps {
 }
 
 /**
- * 섹션 정보 타입
- */
-interface Section {
-  name: string;
-  start: number;
-  end: number;
-  color: string;
-}
-
-/**
  * 시각화 영역 컴포넌트
  * WAVES/STEMS × SCOPE/TIMELINE 모드 전환 지원
  */
@@ -49,63 +39,6 @@ export function VisualizationArea({
     if (containerRef.current) observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
-
-  /**
-   * Mock 섹션 데이터 (실제 구현시 백엔드에서 분석)
-   */
-  const mockSectionsA: Section[] = [
-    { name: "Intro", start: 0, end: 15, color: "#666" },
-    { name: "Verse", start: 15, end: 45, color: "#8b5cf6" },
-    { name: "Chorus", start: 45, end: 75, color: "#ec4899" },
-    { name: "Outro", start: 75, end: deckA.duration || 90, color: "#666" },
-  ];
-
-  const mockSectionsB: Section[] = [
-    { name: "Intro", start: 0, end: 20, color: "#666" },
-    { name: "Verse", start: 20, end: 50, color: "#8b5cf6" },
-    { name: "Chorus", start: 50, end: 80, color: "#ec4899" },
-    { name: "Outro", start: 80, end: deckB.duration || 100, color: "#666" },
-  ];
-
-  /**
-   * 섹션 라벨 렌더링
-   */
-  const renderSectionLabels = (sections: Section[], duration: number, isTop: boolean) => {
-    if (subMode !== "timeline") return null;
-    if (duration <= 0) return null;
-
-    return (
-      <div className={`absolute ${isTop ? "top-0" : "bottom-0"} left-0 right-0 h-5 flex overflow-hidden`}>
-        {sections.map((section, idx) => {
-          const width = ((section.end - section.start) / duration) * 100;
-          const left = (section.start / duration) * 100;
-          return (
-            <div
-              key={idx}
-              className="absolute h-full flex items-center justify-center text-[9px] uppercase tracking-wider border-r border-gray-700"
-              style={{
-                left: `${left}%`,
-                width: `${width}%`,
-                backgroundColor: `${section.color}30`,
-                color: section.color,
-              }}
-            >
-              {section.name}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  /**
-   * 플레이헤드 위치 계산
-   */
-  const getPlayheadPosition = (currentTime: number, duration: number): number => {
-    if (duration <= 0) return 50; // 중앙
-    // 중앙 고정 스크롤 방식
-    return 50;
-  };
 
   return (
     <div ref={containerRef} className="flex flex-col h-full bg-[#0a0a14] overflow-hidden">
@@ -145,12 +78,7 @@ export function VisualizationArea({
 
       {/* 메인 시각화 영역 */}
       <div className="flex-1 relative overflow-hidden">
-        {/* 섹션 라벨 (상단) */}
-        {subMode === "timeline" && (
-          <div className="absolute top-0 left-0 right-0 z-10">
-            {renderSectionLabels(mockSectionsA, deckA.duration, true)}
-          </div>
-        )}
+        {/* 섹션 라벨은 실제 분석 결과가 있을 때만 표시 */}
 
         {/* Deck A 시각화 (상단 절반) */}
         <div className="absolute top-0 left-0 right-0 h-1/2 border-b border-[#2a2a3f] overflow-hidden">
@@ -159,6 +87,7 @@ export function VisualizationArea({
               deck={deckA}
               zoomLevel={zoomLevel}
               color={deckA.isPlaying ? "#e91e9e" : "#8b5cf6"}
+              audioUrl={deckA.audioUrl}
             />
           ) : (
             <StemVisualsCanvas
@@ -187,6 +116,7 @@ export function VisualizationArea({
               deck={deckB}
               zoomLevel={zoomLevel}
               color={deckB.isPlaying ? "#3b82f6" : "#06b6d4"}
+              audioUrl={deckB.audioUrl}
             />
           ) : (
             <StemVisualsCanvas
@@ -197,13 +127,7 @@ export function VisualizationArea({
             />
           )}
         </div>
-
-        {/* 섹션 라벨 (하단) */}
-        {subMode === "timeline" && (
-          <div className="absolute bottom-0 left-0 right-0 z-10">
-            {renderSectionLabels(mockSectionsB, deckB.duration, false)}
-          </div>
-        )}
+        {/* 섹션 라벨은 실제 분석 결과가 있을 때만 표시 */}
       </div>
 
       {/* 미니 웨이브폼 (Deck B) - 빨간색 배경 바 */}

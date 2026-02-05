@@ -42,18 +42,12 @@ export type {
   MixResult,
 } from './transition';
 
-// SoundCloud API
+// SoundCloud API (일부 기능 비활성화됨)
 export {
-  searchTracks,
-  getPlaylists,
-  getTracksByGenre,
   mockSearchTracks,
   mockGetTracksByGenre,
   formatDuration as formatSoundCloudDuration,
-  getStreamUrl as getSoundCloudStreamUrl,
 } from './soundcloud';
 export type {
   SoundCloudTrack,
-  SoundCloudPlaylist,
-  SearchResult,
 } from './soundcloud';

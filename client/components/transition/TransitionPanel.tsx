@@ -21,9 +21,8 @@ import {
 import { DeckPanelCompact } from "./DeckPanelCompact";
 import { VisualizationArea } from "./VisualizationArea";
 import { TransportBar } from "./TransportBar";
-import { LibraryPanel } from "./LibraryPanel";
+import { LibraryPanel, type UploadedTrack } from "./LibraryPanel";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
-import type { SoundCloudTrack } from "@/lib/api/soundcloud";
 import type { BeatAnalysis } from "@/lib/api/transition";
 import { uploadAudioFile, createTransitionMix, getStreamUrl, splitAudio } from "@/lib/api/transition";
 
@@ -34,6 +33,8 @@ export interface DeckState {
   file?: File;
   trackName?: string;
   artistName?: string;
+  /** 서버에서 스트리밍할 오디오 URL */
+  audioUrl?: string;
   bpm: number;
   originalBpm: number;
   pitchPercent: number;  // -8% ~ +8%
@@ -84,6 +85,7 @@ export function TransitionPanel() {
     currentTime: 0,
     duration: 0,
     isPlaying: false,
+    audioUrl: undefined,
     eqLow: 50,
     eqMid: 50,
     eqHigh: 50,
@@ -225,6 +227,10 @@ export function TransitionPanel() {
             fileIdSetter(response.trackId);
             console.log(`🔑 [Deck ${side}] fileId 설정 완료: ${response.trackId}`);
             
+            // 오디오 스트림 URL 생성
+            const audioStreamUrl = getStreamUrl(response.trackId);
+            console.log(`🔊 [Deck ${side}] 오디오 스트림 URL: ${audioStreamUrl}`);
+            
             // 분석 결과 적용
             const analysis = response.analysis;
             console.log(`📊 [Deck ${side}] 분석 결과:`, analysis);
@@ -232,6 +238,7 @@ export function TransitionPanel() {
             setter(prev => ({
                 ...prev,
                 trackName: (response.originalName || file.name.replace(/\.[^/.]+$/, "")) + " (스템 분리 중...)",
+                audioUrl: audioStreamUrl,
                 bpm: analysis?.bpm ? Math.round(analysis.bpm * 10) / 10 : 120,
                 originalBpm: analysis?.bpm ? Math.round(analysis.bpm * 10) / 10 : 120,
                 duration: analysis?.duration || 180,
@@ -316,9 +323,9 @@ export function TransitionPanel() {
   /**
    * 트랙 선택 핸들러 (라이브러리에서)
    */
-  const handleTrackSelect = useCallback((track: SoundCloudTrack, side?: 'A' | 'B') => {
-    const targetSide = side || 'A';
-    console.log(`Loading ${track.title} to Deck ${targetSide}`);
+  const handleTrackSelect = useCallback((track: UploadedTrack, side: 'A' | 'B') => {
+    console.log(`Loading ${track.title} to Deck ${side}`);
+    // TODO: 라이브러리에서 트랙 선택 시 로드 로직 구현
   }, []);
 
   /**
@@ -746,7 +753,7 @@ export function TransitionPanel() {
 
       {/* ===== 라이브러리 패널 ===== */}
       <div className="h-48 min-h-[150px] border-t border-[#2a2a3f]">
-        <LibraryPanel onTrackSelect={handleTrackSelect} />
+        <LibraryPanel uploadedTracks={[] as UploadedTrack[]} onTrackSelect={handleTrackSelect} />
       </div>
 
       {/* 숨겨진 Mix 결과 오디오 요소 */}
