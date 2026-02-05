@@ -187,6 +187,11 @@ export function TransitionPanel() {
     const setter = side === 'A' ? setDeckA : setDeckB;
     const fileIdSetter = side === 'A' ? setFileIdA : setFileIdB;
     
+    console.log(`\n🎵 ===== Deck ${side} 파일 로드 시작 =====`);
+    console.log(`   📁 파일명: ${file.name}`);
+    console.log(`   📏 크기: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`   📂 타입: ${file.type}`);
+    
     // Set loading state (optional, or just partial state)
     setter(prev => ({
       ...prev,
@@ -197,36 +202,46 @@ export function TransitionPanel() {
     }));
 
     try {
+        console.log(`📤 [Deck ${side}] 서버에 업로드 요청 중...`);
         const response = await uploadAudioFile(file);
+        
+        console.log(`📥 [Deck ${side}] 서버 응답:`, response);
+        
         if (response.success) {
+            console.log(`✅ [Deck ${side}] 업로드 성공! TrackId: ${response.trackId}`);
+            
+            // fileId 설정
             fileIdSetter(response.trackId);
+            console.log(`🔑 [Deck ${side}] fileId 설정 완료: ${response.trackId}`);
             
             // Trigger stem separation in background
             splitAudio(response.trackId).then(res => {
-                console.log(`[Deck ${side}] Stem Split Started:`, res.jobId);
+                console.log(`🔨 [Deck ${side}] Stem Split Started:`, res.jobId);
             }).catch(err => {
-                console.warn(`[Deck ${side}] Stem Split Request Failed:`, err);
+                console.warn(`⚠️ [Deck ${side}] Stem Split Request Failed:`, err);
             });
             
             // Server might return analysis (bpm, duration, etc.)
-            // If not, we might need a separate analyze call or defaults
             const analysis = response.analysis;
+            console.log(`📊 [Deck ${side}] 분석 결과:`, analysis);
             
             setter(prev => ({
                 ...prev,
                 trackName: response.originalName || file.name.replace(/\.[^/.]+$/, ""),
-                bpm: analysis?.bpm ? Math.round(analysis.bpm * 10) / 10 : 120, // Default 120
+                bpm: analysis?.bpm ? Math.round(analysis.bpm * 10) / 10 : 120,
                 originalBpm: analysis?.bpm ? Math.round(analysis.bpm * 10) / 10 : 120,
-                duration: analysis?.duration || 180, // Default 3 mins if unknown
-                beatGrid: analysis?.beats || [], // if `DeckState` has beatGrid
+                duration: analysis?.duration || 180,
             }));
-            console.log(`Deck ${side} loaded: ${response.trackId}`);
+            console.log(`✅ [Deck ${side}] 로드 완료!`);
         } else {
-             setter(prev => ({ ...prev, trackName: prev.trackName?.replace(" (Uploading...)", " (Error)") }));
-             alert(`Upload failed: ${response.message}`);
+            console.error(`❌ [Deck ${side}] 업로드 실패:`, response.message);
+            setter(prev => ({ ...prev, trackName: prev.trackName?.replace(" (Uploading...)", " (Error)") }));
+            alert(`Upload failed: ${response.message}`);
         }
     } catch (e: any) {
-        console.error("File load error:", e);
+        console.error(`❌ [Deck ${side}] File load error:`, e);
+        console.error(`   에러 메시지: ${e.message}`);
+        console.error(`   스택 트레이스:`, e.stack);
         setter(prev => ({ ...prev, trackName: prev.trackName?.replace(" (Uploading...)", " (Error)") }));
         alert(`Upload error: ${e.message}`);
     }
@@ -296,18 +311,32 @@ export function TransitionPanel() {
   const [mixProgress, setMixProgress] = useState(0);
 
   const handleMagicMix = useCallback(async () => {
+    console.log(`\n✨ ===== Magic Mix 시작 =====`);
+    console.log(`   🔑 fileIdA: ${fileIdA}`);
+    console.log(`   🔑 fileIdB: ${fileIdB}`);
+    console.log(`   ⏱️ deckA.duration: ${deckA.duration}`);
+    console.log(`   ⏱️ deckB.duration: ${deckB.duration}`);
+    console.log(`   🎼 deckA.bpm: ${deckA.bpm}`);
+    console.log(`   🎼 deckB.bpm: ${deckB.bpm}`);
+    
     // fileId가 없으면 파일 정보로 체크 (Mock/Fallback)
     const hasTrackA = fileIdA !== null || deckA.duration > 0;
     const hasTrackB = fileIdB !== null || deckB.duration > 0;
     
+    console.log(`   ✅ hasTrackA: ${hasTrackA}`);
+    console.log(`   ✅ hasTrackB: ${hasTrackB}`);
+    
     if (!hasTrackA || !hasTrackB) {
-      alert('Magic Mix: 두 덱 모두에 트랙이 필요합니다.');
+      console.error(`❌ Magic Mix 실패: 트랙이 없습니다.`);
+      console.error(`   fileIdA가 null이고 deckA.duration이 0입니다.` + (hasTrackA ? '' : ' (Track A 없음)'));
+      console.error(`   fileIdB가 null이고 deckB.duration이 0입니다.` + (hasTrackB ? '' : ' (Track B 없음)'));
+      alert('Magic Mix: 두 덱 모두에 트랙이 필요합니다. 파일을 드래그앤드롭한 후 업로드가 완료될 때까지 기다려주세요.');
       return;
     }
 
     setIsMixProcessing(true);
     setMixProgress(0);
-    console.log('Magic Mix 시작...');
+    console.log('🎛️ Magic Mix 처리 시작...');
 
     try {
       // fileId가 있으면 실제 API 호출
@@ -324,7 +353,7 @@ export function TransitionPanel() {
           fileIdA,
           fileIdB,
           { 
-              transitionType: 'auto', // Auto-detect based on BPM difference
+              transitionType: 'blend', // 서버에서 BPM 차이 기반으로 자동 결정됨
               bridgeBars: 4 
           }
         );

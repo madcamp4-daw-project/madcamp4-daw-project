@@ -124,20 +124,22 @@ def run_mix(track_a_id: str, track_b_id: str, mix_type: str = "auto", bridge_bar
         
         emit_progress(60, "믹싱 전략 결정 중...")
         
-        # 믹스 타입 결정
-        if mix_type == "auto":
-            if bpm_diff > config.BPM_THRESHOLD:
-                mix_type = "drop"
-            else:
-                mix_type = "blend"
+        # ⚠️ 믹스 타입은 항상 BPM 차이로만 결정 (전달받은 mix_type 파라미터 무시)
+        # BPM_THRESHOLD(기본값 20) 이상 차이나면 Drop Mix, 그렇지 않으면 Blend Mix
+        if bpm_diff > config.BPM_THRESHOLD:
+            actual_mix_type = "drop"
+            emit_progress(65, f"BPM 차이 {bpm_diff:.1f} > {config.BPM_THRESHOLD} → DROP MIX 선택")
+        else:
+            actual_mix_type = "blend"
+            emit_progress(65, f"BPM 차이 {bpm_diff:.1f} <= {config.BPM_THRESHOLD} → BLEND MIX 선택")
         
         final_mix = None
         strategy_name = ""
         
         # 믹싱 실행
-        emit_progress(70, f"{mix_type.upper()} Mix 실행 중...")
+        emit_progress(70, f"{actual_mix_type.upper()} Mix 실행 중...")
         
-        if mix_type == "drop":
+        if actual_mix_type == "drop":
             mixer = DropMixStrategy()
             final_mix = mixer.process(
                 y_a=y_a_full,

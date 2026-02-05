@@ -160,11 +160,21 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) throw new Error('파일이 없습니다.');
 
-        console.log(`🔍 분석 시작: ${req.file.filename}`);
+        console.log(`\n🎵 ===== 파일 업로드 시작 =====`);
+        console.log(`   📁 파일명: ${req.file.originalname}`);
+        console.log(`   💾 저장명: ${req.file.filename}`);
+        console.log(`   📏 크기: ${(req.file.size / 1024 / 1024).toFixed(2)} MB`);
+        console.log(`   📂 경로: ${req.file.path}`);
 
+        console.log(`\n🔍 오디오 분석 시작...`);
         // 분석 스크립트 실행
         // 주의: 파일 경로 전체를 넘김
         const analysisResult = await runPythonScript('audio_analysis.py', [req.file.path]);
+        
+        console.log(`✅ 분석 완료:`);
+        console.log(`   🎼 BPM: ${analysisResult.bpm || 'N/A'}`);
+        console.log(`   🎹 Key: ${analysisResult.key || 'N/A'}`);
+        console.log(`   ⏱️ Duration: ${analysisResult.duration?.toFixed(1) || 'N/A'}s`);
 
         // 성공 응답
         res.json({
@@ -208,7 +218,9 @@ router.post('/split', (req, res) => {
     const jobId = `job_split_${Date.now()}`;
     jobQueue.set(jobId, { status: 'processing', type: 'separation', startTime: Date.now() });
 
-    console.log(`🔨 분리 작업 시작 (Job: ${jobId}, File: ${targetFilename})`);
+    console.log(`\n🔨 ===== 스템 분리 요청 =====`);
+    console.log(`   🎵 TrackId: ${targetFilename}`);
+    console.log(`   🔨 분리 작업 시작 (Job: ${jobId})`);
 
     // 즉시 응답 (Non-blocking)
     res.json({ success: true, jobId, message: '분리 작업이 백그라운드에서 시작되었습니다.' });
@@ -267,8 +279,15 @@ router.get('/status/:jobId', (req, res) => {
 router.post('/blend', (req, res) => {
     const { sourceId, targetId, mixType = 'blend', bridgeBars = 4 } = req.body;
     
+    console.log(`\n🎛️ ===== BLEND/MIX API 요청 =====`);
+    console.log(`   📥 sourceId (Track A): ${sourceId}`);
+    console.log(`   📥 targetId (Track B): ${targetId}`);
+    console.log(`   🎚️ mixType: ${mixType} (서버에서 BPM 기반으로 자동 결정됨)`);
+    console.log(`   📊 bridgeBars: ${bridgeBars}`);
+    
     // 유효성 검사
     if (!sourceId || !targetId) {
+        console.error(`❌ 유효성 검사 실패: sourceId 또는 targetId가 없습니다.`);
         return res.status(400).json({ 
             success: false, 
             error: 'sourceId and targetId are required',
@@ -279,6 +298,7 @@ router.post('/blend', (req, res) => {
     // mixType 유효성 검사
     const validMixTypes = ['blend', 'drop'];
     if (!validMixTypes.includes(mixType.toLowerCase())) {
+        console.error(`❌ 유효성 검사 실패: 잘못된 mixType: ${mixType}`);
         return res.status(400).json({ 
             success: false, 
             error: `Invalid mixType: ${mixType}. Use 'blend' or 'drop'.`,
@@ -295,9 +315,9 @@ router.post('/blend', (req, res) => {
         startTime: Date.now() 
     });
     
-    console.log(`🎛️ Mix 작업 시작 (Job: ${jobId}, Type: ${mixType})`);
-    console.log(`   Track A: ${sourceId}`);
-    console.log(`   Track B: ${targetId}`);
+    console.log(`✅ Job 생성 완료: ${jobId}`);
+    console.log(`   🎵 Track A: ${sourceId}`);
+    console.log(`   🎵 Track B: ${targetId}`);
     
     // 즉시 응답 (Non-blocking)
     res.json({ 

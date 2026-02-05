@@ -15,9 +15,33 @@ app.use(cors()); // 프론트엔드와 통신을 위해 필수
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 로깅 미들웨어 (라우트보다 먼저 정의해야 함)
+// 상세 로깅 미들웨어 (라우트보다 먼저 정의해야 함)
 app.use((req, res, next) => {
-    console.log(`[요청옴] ${req.method} ${req.url}`);
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+    
+    // 요청 로깅
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`📥 [${timestamp}] ${req.method} ${req.url}`);
+    if (req.body && Object.keys(req.body).length > 0) {
+        console.log(`   📦 Body:`, JSON.stringify(req.body, null, 2));
+    }
+    if (req.file) {
+        console.log(`   📎 File: ${req.file.originalname} (${(req.file.size / 1024).toFixed(1)} KB)`);
+    }
+    
+    // 응답 로깅
+    const originalSend = res.send;
+    res.send = function(body) {
+        const duration = Date.now() - startTime;
+        console.log(`📤 [응답] Status: ${res.statusCode} | 처리시간: ${duration}ms`);
+        if (res.statusCode >= 400) {
+            console.log(`   ❌ Error Response:`, typeof body === 'string' ? body.substring(0, 200) : body);
+        }
+        console.log(`${'='.repeat(60)}\n`);
+        return originalSend.call(this, body);
+    };
+    
     next();
 });
 
