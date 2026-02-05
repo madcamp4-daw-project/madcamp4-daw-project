@@ -77,7 +77,7 @@ export async function createTransitionMix(
   sourceId: string, // Track A
   targetId: string, // Track B
   options: {
-    transitionType: "blend" | "drop";
+    transitionType: "blend" | "drop" | "auto";
     bridgeBars?: number; // for drop mix
     // Server doesn't seem to support syncBpm/transitionDuration in 'blend' endpoint args directly based on current code, 
     // but we'll include them if server updates, or minimal args for now.
@@ -100,6 +100,27 @@ export async function createTransitionMix(
   }
 
   return await response.json();
+}
+
+/**
+ * 2.5. 스템 분리 요청 (백그라운드)
+ */
+export async function splitAudio(trackId: string): Promise<{
+    success: boolean;
+    jobId: string;
+    message: string;
+}> {
+    const response = await fetch(`${BASE_URL}/split`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackId }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Split request failed: ${response.statusText}`);
+    }
+
+    return await response.json();
 }
 
 /**

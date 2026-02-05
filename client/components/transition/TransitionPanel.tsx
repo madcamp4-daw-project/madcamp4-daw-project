@@ -25,7 +25,7 @@ import { LibraryPanel } from "./LibraryPanel";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import type { SoundCloudTrack } from "@/lib/api/soundcloud";
 import type { BeatAnalysis } from "@/lib/api/transition";
-import { uploadAudioFile, createTransitionMix, getStreamUrl } from "@/lib/api/transition";
+import { uploadAudioFile, createTransitionMix, getStreamUrl, splitAudio } from "@/lib/api/transition";
 
 /**
  * 덱 상태 인터페이스
@@ -201,6 +201,13 @@ export function TransitionPanel() {
         if (response.success) {
             fileIdSetter(response.trackId);
             
+            // Trigger stem separation in background
+            splitAudio(response.trackId).then(res => {
+                console.log(`[Deck ${side}] Stem Split Started:`, res.jobId);
+            }).catch(err => {
+                console.warn(`[Deck ${side}] Stem Split Request Failed:`, err);
+            });
+            
             // Server might return analysis (bpm, duration, etc.)
             // If not, we might need a separate analyze call or defaults
             const analysis = response.analysis;
@@ -317,7 +324,7 @@ export function TransitionPanel() {
           fileIdA,
           fileIdB,
           { 
-              transitionType: 'blend', // TODO: Allow 'auto' in client API
+              transitionType: 'auto', // Auto-detect based on BPM difference
               bridgeBars: 4 
           }
         );
