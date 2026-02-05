@@ -32,6 +32,5 @@ export type { TransitionEffect, TransitionEffectType } from "./TransitionFX";
 export { AIParameterPanel } from "./AIParameterPanel";
 export type { AITransitionParams } from "./AIParameterPanel";
 
-// SoundCloud 연동
-export { SoundCloudModal } from "./SoundCloudModal";
-
+// LibraryPanel 타입 재export
+export type { UploadedTrack } from "./LibraryPanel";
