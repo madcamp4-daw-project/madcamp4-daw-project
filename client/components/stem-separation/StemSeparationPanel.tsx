@@ -8,19 +8,9 @@ import { StemDropZone } from "./StemDropZone";
 import { StemExtractionDialog } from "./StemExtractionDialog";
 import type { StemJobStatus } from "@/lib/api/stemSeparationClient";
 import { getStemDownloadUrl } from "@/lib/api/stemSeparationClient";
+import { useStemSeparationStore, type StemData } from "@/lib/stores/useStemSeparationStore";
 
-interface StemData {
-  id: string;
-  name: string;
-  color: string;
-  audioUrl?: string;
-  volume: number;
-  isSolo: boolean;
-  isMuted: boolean;
-  isPlaying: boolean;
-  waveformData: number[];
-}
-
+// 스템 색상 정의
 const stemColors: Record<string, string> = {
   drums: "#9B59B6",
   bass: "#E74C3C",
@@ -122,17 +112,32 @@ function WaveformCanvas({ audioUrl, color, isMuted }: { audioUrl?: string; color
 }
 
 export function StemSeparationPanel(): React.ReactElement {
-  const [originalFile, setOriginalFile] = useState<File | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState<boolean>(false);
-  const [stems, setStems] = useState<StemData[]>([]);
-  const [isPlayingAll, setIsPlayingAll] = useState<boolean>(false);
+  // Zustand 스토어에서 상태 가져오기 (탭 전환 시에도 유지됨)
+  const {
+    originalFile,
+    originalFileName,
+    stems,
+    isPlayingAll,
+    isDialogOpen,
+    setOriginalFile,
+    setStems,
+    setIsPlayingAll,
+    setIsDialogOpen,
+    togglePlayAll,
+    toggleStemSolo,
+    toggleStemMute,
+    toggleStemPlay,
+    setStemVolume,
+    resetAll,
+  } = useStemSeparationStore();
 
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
 
+  // 파일 선택 핸들러
   const handleFileSelect = useCallback((file: File): void => {
     setOriginalFile(file);
     setIsDialogOpen(true);
-  }, []);
+  }, [setOriginalFile, setIsDialogOpen]);
 
   const handleExtractComplete = useCallback(
     (extractedStems: NonNullable<NonNullable<StemJobStatus["result"]>["stems"]>): void => {
@@ -197,9 +202,9 @@ export function StemSeparationPanel(): React.ReactElement {
     });
   }, [stems]);
 
+  // 전체 재생 토글 핸들러
   const handlePlayAllToggle = useCallback((): void => {
     const newState = !isPlayingAll;
-    setIsPlayingAll(newState);
     
     // Reset all tracks to beginning when playing
     if (newState) {
@@ -208,56 +213,31 @@ export function StemSeparationPanel(): React.ReactElement {
       });
     }
     
-    setStems((prev: StemData[]) => prev.map((s: StemData) => ({ ...s, isPlaying: newState })));
-  }, [isPlayingAll]);
+    // 스토어의 togglePlayAll 액션 사용
+    togglePlayAll();
+  }, [isPlayingAll, togglePlayAll]);
 
-  // Solo toggle - mutes all other tracks when enabled
+  // Solo 토글 핸들러 - 스토어 액션 사용
   const handleSoloToggle = useCallback((id: string): void => {
-    setStems((prev: StemData[]) => {
-      const targetTrack = prev.find(s => s.id === id);
-      const newSoloState = targetTrack ? !targetTrack.isSolo : false;
-      
-      return prev.map((s: StemData) => {
-        if (s.id === id) {
-          // Toggle Solo on this track, clear its Mute
-          return { ...s, isSolo: newSoloState, isMuted: false };
-        } else {
-          // If enabling Solo, mute all other tracks
-          // If disabling Solo, unmute other tracks (unless they have their own Solo)
-          if (newSoloState) {
-            return { ...s, isMuted: true };
-          } else {
-            // Check if any OTHER track still has Solo
-            const otherHasSolo = prev.some(other => other.id !== id && other.isSolo);
-            if (!otherHasSolo) {
-              return { ...s, isMuted: false };
-            }
-          }
-          return s;
-        }
-      });
-    });
-  }, []);
+    toggleStemSolo(id);
+  }, [toggleStemSolo]);
 
-  // Mute toggle - also clears Solo on the same track
+  // Mute 토글 핸들러 - 스토어 액션 사용
   const handleMuteToggle = useCallback((id: string): void => {
-    setStems((prev: StemData[]) => prev.map((s: StemData) => {
-      if (s.id === id) {
-        // If enabling Mute, disable Solo
-        return { ...s, isMuted: !s.isMuted, isSolo: !s.isMuted ? false : s.isSolo };
-      }
-      return s;
-    }));
-  }, []);
+    toggleStemMute(id);
+  }, [toggleStemMute]);
 
+  // Play 토글 핸들러 - 스토어 액션 사용
   const handlePlayToggle = useCallback((id: string): void => {
-    setStems((prev: StemData[]) => prev.map((s: StemData) => s.id === id ? { ...s, isPlaying: !s.isPlaying } : s));
-  }, []);
+    toggleStemPlay(id);
+  }, [toggleStemPlay]);
 
+  // 볼륨 변경 핸들러 - 스토어 액션 사용
   const handleVolumeChange = useCallback((id: string, volume: number): void => {
-    setStems((prev: StemData[]) => prev.map((s: StemData) => s.id === id ? { ...s, volume } : s));
-  }, []);
+    setStemVolume(id, volume);
+  }, [setStemVolume]);
 
+  // 내보내기 핸들러
   const handleExport = useCallback((stem: StemData): void => {
     if (!stem.audioUrl) return;
     const link = document.createElement("a");
@@ -266,13 +246,12 @@ export function StemSeparationPanel(): React.ReactElement {
     link.click();
   }, []);
 
+  // 새 추출 핸들러 - 스토어의 resetAll 사용
   const handleNewExtraction = useCallback((): void => {
     audioRefs.current.forEach((audio: HTMLAudioElement) => audio.pause());
     audioRefs.current.clear();
-    setStems([]);
-    setOriginalFile(null);
-    setIsPlayingAll(false);
-  }, []);
+    resetAll();
+  }, [resetAll]);
 
   return (
     <div className="flex flex-col h-full bg-[#1a1a1a] text-white p-4 space-y-3">

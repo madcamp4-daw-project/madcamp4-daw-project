@@ -1,5 +1,10 @@
 # server/services/stem_separation.py
 
+# ⚠️ [중요] pkg_resources 경고 억제 (madmom 관련)
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='pkg_resources')
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='pkg_resources')
+
 import sys
 import os
 import subprocess

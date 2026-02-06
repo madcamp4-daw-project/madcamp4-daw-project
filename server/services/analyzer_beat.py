@@ -46,7 +46,7 @@ try:
     print("✅ BeatNet Model Loaded.")
 
 except Exception as e:
-    print(f"\n❌ BeatNet Load Error: {e}")
+    print(f"   ⚠️ BeatNet Load Warning: {e}. (Falling back to Librosa)")
     estimator = None
 
 # =================================================================

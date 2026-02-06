@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState } from "react";
-import type { DeckState } from "./TransitionPanel";
+import type { DeckState } from "@/lib/stores/useTransitionStore";
 import { useWaveSurfer } from "@/hooks/useWaveSurfer";
 
 interface WaveformDisplayProps {

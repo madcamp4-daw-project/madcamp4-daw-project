@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,6 +17,7 @@ import {
   Mic,
   ChevronLeft,
   ChevronRight,
+  RotateCcw,
 } from "lucide-react";
 import { DeckPanelCompact } from "./DeckPanelCompact";
 import { VisualizationArea } from "./VisualizationArea";
@@ -25,106 +26,57 @@ import { LibraryPanel, type UploadedTrack } from "./LibraryPanel";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import type { BeatAnalysis } from "@/lib/api/transition";
 import { uploadAudioFile, createTransitionMix, getStreamUrl, splitAudio } from "@/lib/api/transition";
-
-/**
- * 덱 상태 인터페이스
- */
-export interface DeckState {
-  file?: File;
-  trackName?: string;
-  artistName?: string;
-  /** 서버에서 스트리밍할 오디오 URL */
-  audioUrl?: string;
-  bpm: number;
-  originalBpm: number;
-  pitchPercent: number;  // -8% ~ +8%
-  currentTime: number;   // 현재 재생 시간 (초)
-  duration: number;      // 전체 길이 (초)
-  isPlaying: boolean;
-  eqLow: number;         // 0-100
-  eqMid: number;
-  eqHigh: number;
-  eqLowKill: boolean;
-  eqMidKill: boolean;
-  eqHighKill: boolean;
-  cuePoints: (number | null)[]; // 5개의 CUE 포인트
-  loopBars: number;      // 루프 길이 (바)
-  loopStart: number | null;
-  loopEnd: number | null;
-  isLooping: boolean;
-  analysis?: BeatAnalysis;
-  stemMutes: {
-    drum: boolean;
-    bass: boolean;
-    melody: boolean;
-    vocal: boolean;
-  };
-}
-
-/**
- * 시각화 모드 타입
- */
-type ViewMode = 'waves' | 'stems';
-type SubMode = 'scope' | 'timeline';
+import { useTransitionStore, type DeckState } from "@/lib/stores/useTransitionStore";
 
 /**
  * Transitions DJ 메인 패널 컴포넌트
  * transitions.dj 완전 복제
  */
 export function TransitionPanel() {
-  // 시각화 모드
-  const [viewMode, setViewMode] = useState<ViewMode>('stems');
-  const [subMode, setSubMode] = useState<SubMode>('timeline');
-  const [showFX, setShowFX] = useState(false);
-
-  // 덱 상태 초기화
-  const createInitialDeck = (): DeckState => ({
-    bpm: 120,
-    originalBpm: 120,
-    pitchPercent: 0,
-    currentTime: 0,
-    duration: 0,
-    isPlaying: false,
-    audioUrl: undefined,
-    eqLow: 50,
-    eqMid: 50,
-    eqHigh: 50,
-    eqLowKill: false,
-    eqMidKill: false,
-    eqHighKill: false,
-    cuePoints: [null, null, null, null, null],
-    loopBars: 4,
-    loopStart: null,
-    loopEnd: null,
-    isLooping: false,
-    stemMutes: { drum: false, bass: false, melody: false, vocal: false },
-  });
-
-  const [deckA, setDeckA] = useState<DeckState>(createInitialDeck());
-  const [deckB, setDeckB] = useState<DeckState>(createInitialDeck());
-
-  // 전역 상태
-  const [crossfader, setCrossfader] = useState(50); // 0-100, 50=중앙
-  const [masterVolume, setMasterVolume] = useState(80);
-  const [tempoSync, setTempoSync] = useState(false);
-  const [beatLock, setBeatLock] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [quantize, setQuantize] = useState(true);
-  const [zoomLevel, setZoomLevel] = useState(1);
-
-  // FX 상태 (각 덱)
-  const [fxA, setFxA] = useState({ fx1: 'Echo', fx2: 'Hold Echo', fx3: 'Flanger', beats: 1 });
-  const [fxB, setFxB] = useState({ fx1: 'Echo', fx2: 'Hold Echo', fx3: 'Flanger', beats: 1 });
-
-  // 백엔드 API 연동을 위한 fileId 상태
-  const [fileIdA, setFileIdA] = useState<string | null>(null);
-  const [fileIdB, setFileIdB] = useState<string | null>(null);
-  
-  // 스템 분리 진행 상태 (업로드 후 분석 완료까지 대기)
-  const [isProcessingA, setIsProcessingA] = useState(false);
-  const [isProcessingB, setIsProcessingB] = useState(false);
-  const [stemStatusA, setStemStatusA] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
-  const [stemStatusB, setStemStatusB] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
+  // Zustand 스토어에서 상태 가져오기 (탭 전환 시에도 유지됨)
+  const {
+    viewMode,
+    subMode,
+    showFX,
+    deckA,
+    deckB,
+    crossfader,
+    masterVolume,
+    tempoSync,
+    beatLock,
+    isRecording,
+    quantize,
+    zoomLevel,
+    fileIdA,
+    fileIdB,
+    isProcessingA,
+    isProcessingB,
+    stemStatusA,
+    stemStatusB,
+    isMixProcessing,
+    mixProgress,
+    setViewMode,
+    setSubMode,
+    setShowFX,
+    setDeckA,
+    setDeckB,
+    setCrossfader,
+    setMasterVolume,
+    setTempoSync,
+    setBeatLock,
+    setIsRecording,
+    setQuantize,
+    setZoomLevel,
+    setFileIdA,
+    setFileIdB,
+    setIsProcessingA,
+    setIsProcessingB,
+    setStemStatusA,
+    setStemStatusB,
+    setIsMixProcessing,
+    setMixProgress,
+    resetAll,
+  } = useTransitionStore();
 
   // Magic Mix 결과 오디오
   const mixAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -158,20 +110,20 @@ export function TransitionPanel() {
     eqMidKillB: () => setDeckB(prev => ({ ...prev, eqMidKill: !prev.eqMidKill })),
     eqLowKillB: () => setDeckB(prev => ({ ...prev, eqLowKill: !prev.eqLowKill })),
     
-    // Mixer
-    crossfaderLeft: () => setCrossfader(prev => Math.max(0, prev - 5)),
-    crossfaderRight: () => setCrossfader(prev => Math.min(100, prev + 5)),
+    // Mixer (스토어 세터는 직접 값만 받으므로 현재 값 사용)
+    crossfaderLeft: () => setCrossfader(Math.max(0, crossfader - 5)),
+    crossfaderRight: () => setCrossfader(Math.min(100, crossfader + 5)),
     crossfaderCutLeft: () => setCrossfader(0),
     crossfaderCutRight: () => setCrossfader(100),
     crossfaderCenter: () => setCrossfader(50),
     
     // View
-    zoomIn: () => setZoomLevel(prev => Math.min(4, prev + 0.5)),
-    zoomOut: () => setZoomLevel(prev => Math.max(0.5, prev - 0.5)),
+    zoomIn: () => setZoomLevel(Math.min(4, zoomLevel + 0.5)),
+    zoomOut: () => setZoomLevel(Math.max(0.5, zoomLevel - 0.5)),
     zoomDefault: () => setZoomLevel(1),
     
     // Record
-    recordToggle: () => setIsRecording(prev => !prev),
+    recordToggle: () => setIsRecording(!isRecording),
     
     // Loop
     loopToggleA: () => setDeckA(prev => ({ ...prev, isLooping: !prev.isLooping })),
@@ -182,7 +134,7 @@ export function TransitionPanel() {
     loopDoubleB: () => setDeckB(prev => ({ ...prev, loopBars: Math.min(32, prev.loopBars * 2) })),
     
     // Quantize
-    quantizeToggle: () => setQuantize(prev => !prev),
+    quantizeToggle: () => setQuantize(!quantize),
   };
 
   // 키보드 단축키 훅
@@ -374,14 +326,8 @@ export function TransitionPanel() {
   /**
    * Magic Mix 핸들러 - AI 자동 트랜지션 생성
    * Transition API를 호출하여 두 트랙의 최적 믹스 포인트 계산
-   */
-  /**
-   * Magic Mix 핸들러 - AI 자동 트랜지션 생성
-   * Transition API를 호출하여 두 트랙의 최적 믹스 포인트 계산
    * Polling (1초 간격)으로 상태 확인
    */
-  const [isMixProcessing, setIsMixProcessing] = useState(false);
-  const [mixProgress, setMixProgress] = useState(0);
 
   const handleMagicMix = useCallback(async () => {
     console.log(`\n✨ ===== Magic Mix 시작 =====`);
@@ -500,19 +446,17 @@ export function TransitionPanel() {
    * 활성화 시 두 덱의 비트 위상 동기화
    */
   const handleBeatLockToggle = useCallback(() => {
-    setBeatLock(prev => {
-      const newState = !prev;
-      if (newState && deckA.bpm !== deckB.bpm) {
-        // Beat Lock 활성화 시 BPM도 동기화
-        setDeckB(prevB => ({ 
-          ...prevB, 
-          bpm: deckA.bpm,
-          pitchPercent: ((deckA.bpm - prevB.originalBpm) / prevB.originalBpm) * 100
-        }));
-      }
-      return newState;
-    });
-  }, [deckA.bpm, deckB.bpm]);
+    const newState = !beatLock;
+    if (newState && deckA.bpm !== deckB.bpm) {
+      // Beat Lock 활성화 시 BPM도 동기화
+      setDeckB(prevB => ({ 
+        ...prevB, 
+        bpm: deckA.bpm,
+        pitchPercent: ((deckA.bpm - prevB.originalBpm) / prevB.originalBpm) * 100
+      }));
+    }
+    setBeatLock(newState);
+  }, [deckA.bpm, deckB.bpm, beatLock, setDeckB, setBeatLock]);
 
   /**
    * 탭 활성화 상태 계산
@@ -613,6 +557,18 @@ export function TransitionPanel() {
           <TooltipWrapper content="환경설정을 엽니다. 오디오 장치, 단축키, 시각화 옵션 등을 설정할 수 있습니다.">
             <Button size="icon" variant="ghost" className="w-7 h-7 text-gray-400 hover:text-white">
               <Settings className="w-4 h-4" />
+            </Button>
+          </TooltipWrapper>
+          
+          {/* 리셋 버튼 */}
+          <TooltipWrapper content="모든 상태를 초기화합니다. 두 덱의 트랙과 설정이 모두 리셋됩니다.">
+            <Button 
+              size="icon" 
+              variant="ghost" 
+              className="w-7 h-7 text-gray-400 hover:text-red-400"
+              onClick={resetAll}
+            >
+              <RotateCcw className="w-4 h-4" />
             </Button>
           </TooltipWrapper>
         </div>

@@ -1,9 +1,13 @@
+# ⚠️ [중요] pkg_resources 경고 억제 (madmom 관련)
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='pkg_resources')
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='pkg_resources')
+
 import os
 import sys
 import librosa
 import soundfile as sf
 import numpy as np
-import warnings
 import pyrubberband as pyrb
 
 # 🔥 [Configuration] 설정 값 모음

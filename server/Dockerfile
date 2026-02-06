@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
     alsa-utils \
+    portaudio19-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Symlink python3 -> python
@@ -36,8 +37,8 @@ RUN ln -sf /usr/bin/python3 /usr/bin/python
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# pip 업그레이드
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+# pip 업그레이드 (setuptools<81: madmom pkg_resources 경고 방지)
+RUN pip install --no-cache-dir --upgrade pip "setuptools<81" wheel
 
 # [Build Dependencies]
 # Madmom, Librosa 빌드를 위해 Numpy(<2.0.0)와 Cython을 먼저 설치
@@ -57,6 +58,10 @@ RUN pip install --no-cache-dir \
 # [Install Remaining Dependencies]
 # --no-build-isolation: 위에서 설치한 numpy/Cython을 활용해 빌드
 RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt
+
+# [Install Extra Dependencies]
+COPY requirements_extra.txt ./
+RUN pip install --no-cache-dir -r requirements_extra.txt
 
 # ==============================================
 # 3. Node.js Setup

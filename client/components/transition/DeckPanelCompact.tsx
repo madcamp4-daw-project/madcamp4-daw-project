@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useCallback } from "react";
-import type { DeckState } from "./TransitionPanel";
+import type { DeckState } from "@/lib/stores/useTransitionStore";
 import { TooltipWrapper } from "@/components/ui/tooltip";
 
 interface DeckPanelCompactProps {

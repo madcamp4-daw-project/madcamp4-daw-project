@@ -102,13 +102,27 @@ const runPythonScript = (scriptName, args, jobId = null) => {
         });
 
         pythonProcess.on('close', (code) => {
+            // ⚠️ exit code가 0이 아닌 경우에만 실패 처리
+            // stderr에는 warning도 출력되므로, exit code로만 성공/실패 판단
             if (code !== 0) {
-                return reject(new Error(errorString || 'Python script failed'));
+                // 실제 에러 메시지만 추출 (warning 제외)
+                const actualErrors = errorString
+                    .split('\n')
+                    .filter(line => !line.includes('UserWarning') && !line.includes('DeprecationWarning'))
+                    .join('\n')
+                    .trim();
+                return reject(new Error(actualErrors || errorString || 'Python script failed'));
             }
                 // 에러가 없으면 성공으로 간주
                 // resultString에는 진행률 로그({"progress":...})들이 섞여 있음
                 // 줄바꿈으로 나누고, 마지막으로 유효한 JSON을 찾거나, 'stems' 키가 있는 줄을 찾음
-                const lines = resultString.split('\n').map(l => l.trim()).filter(l => l);
+                // Windows 환경의 \r\n 줄바꿈 처리 및 공백 제거
+                const lines = resultString
+                    .replace(/\r\n/g, '\n')
+                    .replace(/\r/g, '\n')
+                    .split('\n')
+                    .map(l => l.trim())
+                    .filter(l => l.length > 0);
                 let finalResult = null;
                 
                 // 뒤에서부터 검색하여 결과 JSON 찾기 (가장 마지막에 출력된 유효한 결과)
@@ -116,8 +130,8 @@ const runPythonScript = (scriptName, args, jobId = null) => {
                     try {
                         const parsed = JSON.parse(lines[i]);
                         
-                        // 1순위: stems 데이터(분리) 또는 bpm 데이터(분석)가 있는 경우 (확실한 성공 결과)
-                        if (parsed.stems || parsed.bpm) {
+                        // 1순위: stems 데이터(분리) 또는 bpm 데이터(분석) 또는 mixUrl(믹싱)이 있는 경우 (확실한 성공 결과)
+                        if (parsed.stems || parsed.bpm || parsed.mixUrl) {
                             finalResult = parsed;
                             break;
                         }

@@ -1,3 +1,9 @@
+# ⚠️ [중요] madmom pkg_resources 경고 억제
+# setuptools의 pkg_resources 사용으로 인한 UserWarning 방지
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='pkg_resources')
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='pkg_resources')
+
 import os
 import numpy as np
 import librosa
@@ -67,6 +73,10 @@ def find_smart_trim_point(y, sr, target_sample, bpm_hint):
         
         y_proc = y_cut * 2.0 
         y_proc = np.sign(y_proc) * (np.abs(y_proc) ** 2)
+
+        if 'RNNDownBeatProcessor' not in globals():
+            print("      ⚠️ Madmom not available. Skipping Smart Trim.")
+            return target_sample
 
         proc = RNNDownBeatProcessor()
         act = proc(y_proc)

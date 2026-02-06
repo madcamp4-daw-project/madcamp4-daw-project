@@ -12,6 +12,11 @@ Blend Mix와 Drop Mix를 BPM 차이에 따라 자동 선택하여 두 트랙을 
     - 완료: {"mixUrl": "blends/mix_xxx.wav", "mixType": "blend", "duration": 180}
 """
 
+# ⚠️ [중요] pkg_resources 경고 억제 (madmom 관련)
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='pkg_resources')
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='pkg_resources')
+
 import os
 import sys
 import json

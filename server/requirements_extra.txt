@@ -1,0 +1,11 @@
+# ==============================================
+# Web DAW Server - Extra Dependencies
+# ==============================================
+
+# [Beat Detection - BeatNet]
+# PyPI 패키지명은 소문자 사용
+beatnet>=0.0.4
+
+# [Beat Detection - Madmom]
+# madmom은 requirements.txt에 이미 있으므로 제거
+# setuptools<81 필수 (pkg_resources 경고 방지)
