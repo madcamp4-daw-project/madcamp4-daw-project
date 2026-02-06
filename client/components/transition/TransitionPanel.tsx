@@ -55,6 +55,7 @@ export function TransitionPanel() {
     stemStatusB,
     isMixProcessing,
     mixProgress,
+    mixResultUrl,
     setViewMode,
     setSubMode,
     setShowFX,
@@ -75,6 +76,7 @@ export function TransitionPanel() {
     setStemStatusB,
     setIsMixProcessing,
     setMixProgress,
+    setMixResultUrl,
     resetAll,
   } = useTransitionStore();
 
@@ -401,6 +403,7 @@ export function TransitionPanel() {
                     if (statusData.result?.mixUrl && mixAudioRef.current) {
                          const url = getStreamUrl(statusData.result.mixUrl);
                          mixAudioRef.current.src = url;
+                         setMixResultUrl(url);
                          mixAudioRef.current.play().catch(e => console.warn('믹스 오디오 재생 실패:', e));
                     }
                 } else if (statusData.status === 'failed') {
@@ -707,17 +710,89 @@ export function TransitionPanel() {
 
       </div>
 
-      {/* ===== 라이브러리 패널 ===== */}
-      <div className="h-48 min-h-[150px] border-t border-[#2a2a3f]">
-        <LibraryPanel uploadedTracks={[] as UploadedTrack[]} onTrackSelect={handleTrackSelect} />
+      {/* ===== Mix 결과 플레이어 ===== */}
+      <div className="border-t border-[#2a2a3f] bg-gradient-to-b from-[#1a1a2e] to-[#12121f]">
+        {mixResultUrl ? (
+          <div className="p-4">
+            {/* 헤더 */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🎵</span>
+                <span className="text-sm font-bold text-green-400">Magic Mix 완료!</span>
+              </div>
+              <button
+                onClick={() => setMixResultUrl(null)}
+                className="text-gray-500 hover:text-white text-sm"
+              >
+                ✕ 닫기
+              </button>
+            </div>
+            
+            {/* 오디오 플레이어 */}
+            <div className="bg-[#0a0a14] rounded-xl p-4 border border-[#2a2a3f]">
+              {/* 재생 컨트롤 */}
+              <div className="flex items-center gap-4">
+                {/* 큰 재생 버튼 */}
+                <button
+                  onClick={() => {
+                    if (mixAudioRef.current) {
+                      if (mixAudioRef.current.paused) {
+                        mixAudioRef.current.play();
+                      } else {
+                        mixAudioRef.current.pause();
+                      }
+                    }
+                  }}
+                  className="w-14 h-14 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 flex items-center justify-center text-white text-2xl shadow-lg shadow-purple-600/30 transition-all"
+                >
+                  ▶
+                </button>
+                
+                {/* 오디오 & 프로그레스 */}
+                <div className="flex-1">
+                  <audio
+                    ref={mixAudioRef}
+                    src={mixResultUrl}
+                    controls
+                    className="w-full h-12"
+                    style={{ 
+                      borderRadius: '8px',
+                    }}
+                  />
+                </div>
+              </div>
+              
+              {/* 하단 버튼들 */}
+              <div className="flex items-center justify-center gap-3 mt-4">
+                <a 
+                  href={mixResultUrl}
+                  download="magic_mix.wav"
+                  className="px-6 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors flex items-center gap-2"
+                >
+                  💾 WAV 다운로드
+                </a>
+                <button
+                  onClick={() => {
+                    if (mixAudioRef.current) {
+                      mixAudioRef.current.currentTime = 0;
+                      mixAudioRef.current.play();
+                    }
+                  }}
+                  className="px-6 py-2 text-sm font-medium bg-[#2a2a3f] hover:bg-[#3a3a4f] text-white rounded-lg transition-colors flex items-center gap-2"
+                >
+                  🔄 처음부터 재생
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center text-gray-500 text-sm py-4">
+            {isMixProcessing 
+              ? `🔄 믹싱 중... ${mixProgress}% - AI가 두 트랙을 분석하여 최적의 트랜지션을 생성 중입니다...`
+              : '🎧 두 트랙을 업로드한 후 ✨ Magic Mix 버튼을 클릭하여 자동 믹스를 생성하세요'}
+          </div>
+        )}
       </div>
-
-      {/* 숨겨진 Mix 결과 오디오 요소 */}
-      <audio
-        ref={mixAudioRef}
-        style={{ display: 'none' }}
-        preload="auto"
-      />
     </div>
     </TooltipProvider>
   );

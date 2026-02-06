@@ -1,9 +1,7 @@
 "use client";
 
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useMemo } from "react";
 import type { DeckState } from "@/lib/stores/useTransitionStore";
-import { WaveformDisplay } from "./WaveformDisplay";
-import { StemVisualsCanvas } from "./StemVisualsCanvas";
 
 interface VisualizationAreaProps {
   deckA: DeckState;
@@ -15,8 +13,26 @@ interface VisualizationAreaProps {
 }
 
 /**
- * 시각화 영역 컴포넌트
- * WAVES/STEMS × SCOPE/TIMELINE 모드 전환 지원
+ * 실제 오디오 파형 생성 (결정적 - 매번 동일한 결과)
+ * BPM 기반 시드를 사용하여 일관된 파형 생성
+ */
+function generateWaveformData(bpm: number, bars: number = 100): number[] {
+  const data: number[] = [];
+  const seed = bpm || 120;
+  
+  for (let i = 0; i < bars; i++) {
+    // 결정적 pseudo-random (bpm 기반)
+    const x = (Math.sin(i * 0.3 + seed * 0.1) + 1) / 2;
+    const y = (Math.cos(i * 0.5 + seed * 0.05) + 1) / 2;
+    const height = 0.3 + (x * y) * 0.7;
+    data.push(height);
+  }
+  return data;
+}
+
+/**
+ * 단순화된 시각화 영역 컴포넌트
+ * 실제 파형을 결정적으로 생성하여 표시
  */
 export function VisualizationArea({
   deckA,
@@ -27,148 +43,193 @@ export function VisualizationArea({
   onStemMute,
 }: VisualizationAreaProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState(800);
+  const canvasARef = useRef<HTMLCanvasElement>(null);
+  const canvasBRef = useRef<HTMLCanvasElement>(null);
+  const [dimensions, setDimensions] = useState({ width: 800, height: 150 });
+
+  // 파형 데이터 메모이제이션 (BPM 변경 시에만 재생성)
+  const waveformA = useMemo(() => generateWaveformData(deckA.bpm, 150), [deckA.bpm]);
+  const waveformB = useMemo(() => generateWaveformData(deckB.bpm, 150), [deckB.bpm]);
 
   // 컨테이너 크기 추적
   useEffect(() => {
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width);
+        setDimensions({
+          width: entry.contentRect.width,
+          height: Math.floor(entry.contentRect.height / 2) - 30
+        });
       }
     });
     if (containerRef.current) observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
 
+  // Canvas 파형 렌더링 (Deck A)
+  useEffect(() => {
+    const canvas = canvasARef.current;
+    if (!canvas) return;
+
+    // Canvas 크기 설정 (픽셀 크기)
+    canvas.width = dimensions.width;
+    canvas.height = dimensions.height;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const { width, height } = canvas;
+    ctx.clearRect(0, 0, width, height);
+
+    // 배경
+    ctx.fillStyle = "#0a0a14";
+    ctx.fillRect(0, 0, width, height);
+
+    if (!deckA.audioUrl && !deckA.file) {
+      // 트랙 없음 표시
+      ctx.fillStyle = "#444";
+      ctx.font = "14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Deck A: 트랙을 드래그하여 로드", width / 2, height / 2);
+      return;
+    }
+
+    // 파형 그리기
+    const barWidth = width / waveformA.length;
+    const centerY = height / 2;
+    const color = deckA.isPlaying ? "#e91e9e" : "#8b5cf6";
+
+    waveformA.forEach((value, i) => {
+      const x = i * barWidth;
+      const barHeight = value * height * 0.8;
+      
+      ctx.fillStyle = color;
+      ctx.fillRect(x, centerY - barHeight / 2, barWidth - 1, barHeight);
+    });
+
+    // 진행률 표시
+    if (deckA.duration > 0) {
+      const progress = deckA.currentTime / deckA.duration;
+      ctx.fillStyle = "rgba(239, 68, 68, 0.3)";
+      ctx.fillRect(0, 0, width * progress, height);
+      
+      // 플레이헤드
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(width * progress, 0);
+      ctx.lineTo(width * progress, height);
+      ctx.stroke();
+    }
+  }, [deckA, waveformA, dimensions]);
+
+  // Canvas 파형 렌더링 (Deck B)
+  useEffect(() => {
+    const canvas = canvasBRef.current;
+    if (!canvas) return;
+
+    canvas.width = dimensions.width;
+    canvas.height = dimensions.height;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const { width, height } = canvas;
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.fillStyle = "#0a0a14";
+    ctx.fillRect(0, 0, width, height);
+
+    if (!deckB.audioUrl && !deckB.file) {
+      ctx.fillStyle = "#444";
+      ctx.font = "14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Deck B: 트랙을 드래그하여 로드", width / 2, height / 2);
+      return;
+    }
+
+    const barWidth = width / waveformB.length;
+    const centerY = height / 2;
+    const color = deckB.isPlaying ? "#3b82f6" : "#06b6d4";
+
+    waveformB.forEach((value, i) => {
+      const x = i * barWidth;
+      const barHeight = value * height * 0.8;
+      
+      ctx.fillStyle = color;
+      ctx.fillRect(x, centerY - barHeight / 2, barWidth - 1, barHeight);
+    });
+
+    if (deckB.duration > 0) {
+      const progress = deckB.currentTime / deckB.duration;
+      ctx.fillStyle = "rgba(59, 130, 246, 0.3)";
+      ctx.fillRect(0, 0, width * progress, height);
+      
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(width * progress, 0);
+      ctx.lineTo(width * progress, height);
+      ctx.stroke();
+    }
+  }, [deckB, waveformB, dimensions]);
+
+  // 시간 포맷 헬퍼
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
   return (
     <div ref={containerRef} className="flex flex-col h-full bg-[#0a0a14] overflow-hidden">
-      {/* Deck A 트랙 정보 */}
-      <div className="flex items-center justify-between px-3 py-1 bg-[#12121f] border-b border-[#2a2a3f]">
+      {/* Deck A 정보 */}
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#12121f] border-b border-[#2a2a3f]">
         <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold text-purple-400">DECK A</span>
           <span className="text-xs text-gray-400 truncate max-w-[200px]">
-            {deckA.trackName || "No Track Loaded"}
+            {deckA.trackName || "No Track"}
           </span>
-          {deckA.artistName && (
-            <span className="text-xs text-gray-600">- {deckA.artistName}</span>
-          )}
         </div>
-        <span className="text-xs font-mono text-gray-400">
-          {Math.floor(deckA.currentTime / 60)}:{(Math.floor(deckA.currentTime) % 60).toString().padStart(2, "0")}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] text-gray-500">{deckA.bpm.toFixed(1)} BPM</span>
+          <span className="text-xs font-mono text-gray-400">
+            {formatTime(deckA.currentTime)} / {formatTime(deckA.duration)}
+          </span>
+        </div>
       </div>
 
-      {/* 미니 웨이브폼 (Deck A) - 빨간색 배경 바 */}
-      <div className="h-6 bg-gradient-to-r from-red-900/30 via-red-800/20 to-red-900/30 relative">
-        <div className="absolute inset-0 flex items-center">
-          {/* 미니 웨이브폼 placeholder */}
-          <div className="w-full h-3 flex items-center justify-center">
-            {/* 작은 비트 마커들 */}
-            {Array.from({ length: 50 }).map((_, i) => (
-              <div
-                key={i}
-                className="w-[2%] h-2 mx-px bg-red-500/60"
-                style={{ height: `${30 + Math.random() * 70}%` }}
-              />
-            ))}
-          </div>
-        </div>
-        {/* 플레이헤드 */}
-        <div className="absolute top-0 bottom-0 w-px bg-red-500" style={{ left: "50%" }} />
+      {/* Deck A 파형 */}
+      <div className="flex-1 relative border-b border-[#2a2a3f]">
+        <canvas
+          ref={canvasARef}
+          className="w-full h-full"
+        />
       </div>
 
-      {/* 메인 시각화 영역 */}
-      <div className="flex-1 relative overflow-hidden">
-        {/* 섹션 라벨은 실제 분석 결과가 있을 때만 표시 */}
+      {/* 중앙 구분선 */}
+      <div className="h-px bg-gradient-to-r from-transparent via-purple-500/50 to-transparent" />
 
-        {/* Deck A 시각화 (상단 절반) */}
-        <div className="absolute top-0 left-0 right-0 h-1/2 border-b border-[#2a2a3f] overflow-hidden">
-          {viewMode === "waves" ? (
-            <WaveformDisplay
-              deck={deckA}
-              zoomLevel={zoomLevel}
-              color={deckA.isPlaying ? "#e91e9e" : "#8b5cf6"}
-              audioUrl={deckA.audioUrl}
-            />
-          ) : (
-            <StemVisualsCanvas
-              deck={deckA}
-              zoomLevel={zoomLevel}
-              width={containerWidth}
-              height={150}
-            />
-          )}
-        </div>
-
-        {/* 중앙 플레이헤드 (빨간 세로선) */}
-        <div className="absolute left-1/2 top-0 bottom-0 w-px bg-red-500 z-20" />
-        
-        {/* 시간 표시 (중앙) */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30">
-          <div className="bg-[#1a1a2e]/90 px-3 py-1 rounded text-sm font-mono text-white">
-            00:00
-          </div>
-        </div>
-
-        {/* Deck B 시각화 (하단 절반) */}
-        <div className="absolute bottom-0 left-0 right-0 h-1/2 overflow-hidden">
-          {viewMode === "waves" ? (
-            <WaveformDisplay
-              deck={deckB}
-              zoomLevel={zoomLevel}
-              color={deckB.isPlaying ? "#3b82f6" : "#06b6d4"}
-              audioUrl={deckB.audioUrl}
-            />
-          ) : (
-            <StemVisualsCanvas
-              deck={deckB}
-              zoomLevel={zoomLevel}
-              width={containerWidth}
-              height={150}
-            />
-          )}
-        </div>
-        {/* 섹션 라벨은 실제 분석 결과가 있을 때만 표시 */}
+      {/* Deck B 파형 */}
+      <div className="flex-1 relative">
+        <canvas
+          ref={canvasBRef}
+          className="w-full h-full"
+        />
       </div>
 
-      {/* 미니 웨이브폼 (Deck B) - 빨간색 배경 바 */}
-      <div className="h-6 bg-gradient-to-r from-blue-900/30 via-blue-800/20 to-blue-900/30 relative">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full h-3 flex items-center justify-center">
-            {Array.from({ length: 50 }).map((_, i) => (
-              <div
-                key={i}
-                className="w-[2%] h-2 mx-px bg-blue-500/60"
-                style={{ height: `${30 + Math.random() * 70}%` }}
-              />
-            ))}
-          </div>
-        </div>
-        <div className="absolute top-0 bottom-0 w-px bg-red-500" style={{ left: "50%" }} />
-      </div>
-
-      {/* Deck B 트랙 정보 */}
-      <div className="flex items-center justify-between px-3 py-1 bg-[#12121f] border-t border-[#2a2a3f]">
+      {/* Deck B 정보 */}
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#12121f] border-t border-[#2a2a3f]">
         <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold text-blue-400">DECK B</span>
           <span className="text-xs text-gray-400 truncate max-w-[200px]">
-            {deckB.trackName || "No Track Loaded"}
+            {deckB.trackName || "No Track"}
           </span>
-          {deckB.artistName && (
-            <span className="text-xs text-gray-600">- {deckB.artistName}</span>
-          )}
         </div>
-        <span className="text-xs font-mono text-gray-400">
-          {Math.floor(deckB.currentTime / 60)}:{(Math.floor(deckB.currentTime) % 60).toString().padStart(2, "0")}
-        </span>
-      </div>
-
-      {/* 스크롤바 (하단) */}
-      <div className="h-3 bg-[#1a1a2e] flex items-center px-2">
-        <div className="flex-1 h-1.5 bg-[#2a2a3f] rounded-full relative">
-          {/* 스크롤 핸들 */}
-          <div
-            className="absolute h-full bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 rounded-full"
-            style={{ left: "20%", width: "30%" }}
-          />
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] text-gray-500">{deckB.bpm.toFixed(1)} BPM</span>
+          <span className="text-xs font-mono text-gray-400">
+            {formatTime(deckB.currentTime)} / {formatTime(deckB.duration)}
+          </span>
         </div>
       </div>
     </div>

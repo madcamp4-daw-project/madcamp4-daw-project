@@ -82,6 +82,7 @@ interface TransitionState {
   // Mix 처리
   isMixProcessing: boolean;
   mixProgress: number;
+  mixResultUrl: string | null;
   
   // 액션 - 시각화
   setViewMode: (mode: ViewMode) => void;
@@ -112,6 +113,7 @@ interface TransitionState {
   // 액션 - Mix 처리
   setIsMixProcessing: (value: boolean) => void;
   setMixProgress: (value: number) => void;
+  setMixResultUrl: (url: string | null) => void;
   
   // 리셋
   resetAll: () => void;
@@ -168,6 +170,7 @@ const initialState = {
   stemStatusB: 'idle' as const,
   isMixProcessing: false,
   mixProgress: 0,
+  mixResultUrl: null,
 };
 
 /**
@@ -219,6 +222,7 @@ export const useTransitionStore = create<TransitionState>()(
       // ===== Mix 처리 액션 =====
       setIsMixProcessing: (value) => set({ isMixProcessing: value }, false, 'setIsMixProcessing'),
       setMixProgress: (value) => set({ mixProgress: value }, false, 'setMixProgress'),
+      setMixResultUrl: (url) => set({ mixResultUrl: url }, false, 'setMixResultUrl'),
       
       // ===== 리셋 =====
       resetAll: () => set(initialState, false, 'resetAll'),
